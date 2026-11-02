@@ -1,0 +1,122 @@
+name: LedgerGuard CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend Verification & Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up local environment file
+        run: cp .env.example .env
+
+      - name: Start PostgreSQL 17 containers
+        run: docker compose up -d
+
+      - name: Wait for PostgreSQL database health
+        run: |
+          echo "Waiting for isolated PostgreSQL instances to become healthy..."
+          HEALTHY=0
+          for i in {1..30}; do
+            RUNNING_COUNT=$(docker compose ps --filter "status=running" -q | wc -l)
+            UNHEALTHY_COUNT=$(docker compose ps --format '{{.Health}}' | grep -v '^healthy$' | wc -l)
+            if [ "$RUNNING_COUNT" -eq 3 ] && [ "$UNHEALTHY_COUNT" -eq 0 ]; then
+              echo "All 3 PostgreSQL instances are healthy."
+              docker compose ps
+              HEALTHY=1
+              break
+            fi
+            echo "Waiting for PostgreSQL instances ($i/30)..."
+            sleep 2
+          done
+          if [ "$HEALTHY" -ne 1 ]; then
+            echo "Timed out waiting for PostgreSQL instances to become healthy."
+            docker compose ps
+            exit 1
+          fi
+
+      - name: Install Python dependencies
+        run: uv sync --extra dev
+
+      - name: Run database migrations
+        run: uv run python -m ledgerguard.cli migrate --target all
+
+      - name: Lint with Ruff
+        run: uv run ruff check .
+
+      - name: Typecheck with mypy
+        run: uv run mypy src
+
+      - name: Run test suite with pytest
+        run: uv run pytest -ra -W error
+
+      - name: Run signature recovery demonstration
+        run: ./scripts/demo_signature_recovery.sh
+
+      - name: Audit Python production dependencies
+        run: |
+          uv export --no-dev --no-hashes -o /tmp/ledgerguard-requirements.txt
+          uvx pip-audit -r /tmp/ledgerguard-requirements.txt
+
+      - name: Report container status on failure
+        if: failure()
+        run: |
+          echo "=== Container Status ==="
+          docker compose ps -a
+          echo "=== Container Logs ==="
+          docker compose logs --tail=50
+
+      - name: Tear down containers and volumes
+        if: always()
+        run: docker compose down -v
+
+  console:
+    name: Console Build & Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/console/package-lock.json
+
+      - name: Install and verify console
+        run: |
+          cd apps/console
+          npm ci
+          npm run lint
+          npm run build
+          npm audit --omit=dev
