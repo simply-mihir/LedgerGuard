@@ -421,14 +421,16 @@ Workload benchmarks measure transaction throughput, acceptance versus settlement
 uv run python scripts/run_benchmarks.py
 ```
 
-### Performance Observations (Darwin x86_64, 12 Cores, 16 GB RAM)
+### Recorded Baseline Observations (`docs/benchmarks/baseline_report.md`)
+
+*Recorded on a local Docker-based development environment; results vary by hardware and workload.*
 
 | Workload Scenario | Completed Transfers | Success Rate | Sequential Throughput | Acceptance Latency (p50) | Settlement Latency (p50) | Total Latency (p50) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Uniform Distribution** | 60 | 100.0% | **32.08 TPS** | 7.43 ms | 19.11 ms | 26.54 ms |
 | **Hot Account (80% Concentration)** | 60 | 100.0% | **38.19 TPS** | 6.91 ms | 17.76 ms | 24.67 ms |
 
-*Disclaimer: Benchmark figures represent single-threaded sequential client execution on local hardware for baseline comparison. Results will vary depending on host hardware, virtualization layers, container configurations, and concurrent workload distribution. Under multi-client concurrent execution, hot accounts will serialize on row locks, resulting in elevated wait times.*
+*Benchmark figures represent an existing recorded baseline of single-threaded sequential client execution from [`docs/benchmarks/baseline_report.md`](docs/benchmarks/baseline_report.md). Results vary depending on host hardware, container configuration, and concurrent workload distribution. Under multi-client concurrent execution, hot accounts will serialize on row locks, resulting in elevated wait times.*
 
 ---
 
