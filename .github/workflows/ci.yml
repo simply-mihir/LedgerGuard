@@ -63,7 +63,7 @@ jobs:
           fi
 
       - name: Install Python dependencies
-        run: uv sync --extra dev
+        run: uv sync --frozen --extra dev
 
       - name: Run database migrations
         run: uv run python -m ledgerguard.cli migrate --target all
@@ -82,7 +82,7 @@ jobs:
 
       - name: Audit Python production dependencies
         run: |
-          uv export --no-dev --no-hashes -o /tmp/ledgerguard-requirements.txt
+          uv export --frozen --no-dev --no-hashes -o /tmp/ledgerguard-requirements.txt
           uvx pip-audit -r /tmp/ledgerguard-requirements.txt
 
       - name: Report container status on failure
