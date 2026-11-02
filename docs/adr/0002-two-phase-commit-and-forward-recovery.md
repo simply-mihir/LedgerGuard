@@ -1,4 +1,4 @@
-# ADR 0002: Application-Level Reserve/Confirm/Cancel (TCC-Style) Protocol and Forward Recovery Invariant
+# ADR 0002: TCC Coordination & Forward Recovery Invariant
 
 ## Status
 Accepted
@@ -6,12 +6,12 @@ Accepted
 ## Context
 When customer accounts reside across physically independent database instances, transfers cannot execute within a single ACID transaction. The system requires a distributed coordination mechanism to guarantee that funds are neither lost nor duplicated in the event of process crashes, network partitions, or transient coordinator outages.
 
-A key architectural question is whether to use PostgreSQL's database-native prepared transactions (`PREPARE TRANSACTION` / `COMMIT PREPARED`) or an application-level coordination protocol. Database-native 2PC holds physical database connection locks and row locks indefinitely across network round-trips, creating severe lock contention, deadlock risks across independent nodes, and cascading resource exhaustion if the coordinator dies mid-flight.
+A key architectural question is whether to use PostgreSQL's database-native prepared transactions (`PREPARE TRANSACTION` / `COMMIT PREPARED` or classical XA 2PC) or an application-level coordination protocol. Classical database-native XA 2PC holds physical database connection locks and row locks indefinitely across network round-trips, creating severe lock contention, deadlock risks across independent nodes, and cascading resource exhaustion if the coordinator dies mid-flight.
 
 ## Decision
 1. **Application-Level Reserve/Confirm/Cancel Protocol (TCC-Style):**
-   - The transfer protocol is explicitly classified as **application-level reserve/confirm/cancel coordination (Try-Confirm-Cancel)**, rather than database-native prepared-transaction 2PC.
-   - It does **not** invoke PostgreSQL `PREPARE TRANSACTION` or `COMMIT PREPARED`, and does **not** provide global serializable isolation across databases.
+   - The transfer protocol is explicitly classified as **application-level reserve/confirm/cancel coordination (Try-Confirm-Cancel)**, rather than database-native prepared-transaction XA 2PC.
+   - It does **not** invoke PostgreSQL `PREPARE TRANSACTION`, `COMMIT PREPARED`, or XA, and does **not** hold open distributed database transactions across network boundaries.
    - Each phase and participant command executes as a **locally atomic database transaction** that commits immediately on its respective PostgreSQL instance.
    - **Phase 1 (Reserve / Try):**
      - Source participant executes `source_prepare`: reserves funds by creating an `ACTIVE` record in `holds` and decreasing available balance. The local transaction commits immediately.

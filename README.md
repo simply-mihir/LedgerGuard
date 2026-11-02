@@ -7,18 +7,12 @@
 <p><em>Built with Python 3.12, FastAPI, PostgreSQL 17, and Next.js 15.</em></p>
 
 <p>
-  <a href="https://github.com/simply-mihir/LedgerGuard"><img src="https://img.shields.io/badge/GitHub-simply--mihir%2FLedgerGuard-181717?logo=github&logoColor=white" alt="GitHub Repository"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python 3.12+"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 17"></a>
   <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15.5-000000?logo=next.js&logoColor=white" alt="Next.js 15.5"></a>
-  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black" alt="React 18.3"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.4+-3178C6?logo=typescript&logoColor=white" alt="TypeScript"></a>
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/Docker-Compose_v2-2496ED?logo=docker&logoColor=white" alt="Docker Compose"></a>
-  <a href="https://docs.pytest.org/"><img src="https://img.shields.io/badge/Pytest-8.3-0A9EDC?logo=pytest&logoColor=white" alt="Pytest 8.3"></a>
-  <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/badge/Ruff-0.7+-D7FF64?logo=ruff&logoColor=black" alt="Ruff"></a>
-  <a href="https://mypy-lang.org/"><img src="https://img.shields.io/badge/mypy-1.13-2E64FE" alt="Mypy"></a>
 </p>
 
 </div>
@@ -86,40 +80,24 @@ The core architecture coordinates balance movements across three isolated Postgr
 The following diagram illustrates the deployment topology, runtime components, and storage boundaries across isolated PostgreSQL 17 instances:
 
 ```mermaid
-flowchart TD
-    subgraph Clients["User & Operator Interfaces"]
-        UI["Next.js 15 Operator Console<br/><code>http://localhost:3300</code>"]
-        API_Client["API Consumer / Client Application"]
-    end
+flowchart TB
+    UI["Operator Console"] --> API["FastAPI API"]
+    API --> TC["TCC Coordinator"]
 
-    subgraph Service["Application & Workflow Layer"]
-        API["FastAPI Operator & Transfer API<br/><code>http://127.0.0.1:8010</code>"]
-        TC["Transfer Coordinator<br/>(TCC Engine)"]
-        Worker["Outbox / Inbox Recovery Worker"]
-        Audit["Continuous Reconciliation Engine"]
-    end
+    TC -->|Decisions| CDB[("Coordinator DB")]
+    TC -->|Reserve / Confirm| L1[("Ledger 1")]
+    TC -->|Reserve / Confirm| L2[("Ledger 2")]
 
-    subgraph Storage["Isolated Database Layer (PostgreSQL 17)"]
-        CoordDB[("Coordinator DB<br/><code>:5442</code><br/>Directory & Decisions")]
-        Ledger1DB[("Participant Ledger 1 DB<br/><code>:5443</code><br/>Accounting Kernel & Holds")]
-        Ledger2DB[("Participant Ledger 2 DB<br/><code>:5444</code><br/>Accounting Kernel & Intents")]
-    end
+    Worker["Recovery Worker"] -->|Recover| CDB
+    Worker -->|Recover| L1
+    Worker -->|Recover| L2
 
-    UI -->|HTTP / REST| API
-    API_Client -->|HTTP / REST| API
-    API --> TC
-    TC -->|Idempotency & Decisions| CoordDB
-    TC -->|Phase 1 & 2 Local Calls| Ledger1DB
-    TC -->|Phase 1 & 2 Local Calls| Ledger2DB
-
-    Worker -->|Poll Unconfirmed Decisions| CoordDB
-    Worker -->|Forward Recovery| Ledger1DB
-    Worker -->|Forward Recovery| Ledger2DB
-
-    Audit -->|Audit Probing & Clearing Verification| CoordDB
-    Audit -->|Audit Probing & Clearing Verification| Ledger1DB
-    Audit -->|Audit Probing & Clearing Verification| Ledger2DB
+    Audit["Reconciliation Engine"] -->|Audit| CDB
+    Audit -->|Audit| L1
+    Audit -->|Audit| L2
 ```
+
+*All three storage instances run as isolated PostgreSQL 17 containers bound to loopback: Coordinator DB (`127.0.0.1:5442`), Ledger 1 (`127.0.0.1:5443`), and Ledger 2 (`127.0.0.1:5444`).*
 
 ### Why Independent Databases and Durable Messaging Matter
 
@@ -137,42 +115,25 @@ Cross-ledger transfers execute using an application-level **Try-Confirm-Cancel (
 sequenceDiagram
     autonumber
     actor Client as API Client
-    participant Coord as Coordinator DB (:5442)
-    participant L1 as Source Ledger DB (:5443)
-    participant L2 as Dest Ledger DB (:5444)
+    participant Coord as Coordinator
+    participant L1 as Source Ledger
+    participant L2 as Destination Ledger
 
-    Client->>Coord: POST /v1/transfers (Idempotency-Key)
-    Note over Coord: Validate payload & hash fingerprint<br/>Record transfer intent (state: ACCEPTED)
+    Client->>Coord: Submit transfer with idempotency key
+    Note over Coord,L2: Phase 1 — Try / Reserve
+    Coord->>L1: Reserve source funds (source_prepare)
+    L1-->>Coord: Hold reserved
+    Coord->>L2: Register destination obligation (destination_prepare)
+    L2-->>Coord: Obligation prepared
 
-    rect rgb(235, 240, 250)
-        Note over Coord, L2: Phase 1: Try / Reserve (Distributed Prepare)
-        Coord->>L1: source_prepare(transfer_id, amount)
-        L1->>L1: Verify balance, lock row (account_id ASC)<br/>Create ACTIVE hold, reduce available balance
-        L1-->>Coord: 200 OK (Hold Reserved)
+    Note over Coord: Persist durable COMMIT decision
 
-        Coord->>L2: destination_prepare(transfer_id, amount)
-        L2->>L2: Verify recipient active<br/>Record PREPARED transfer intent
-        L2-->>Coord: 200 OK (Obligation Accepted)
-    end
-
-    rect rgb(235, 250, 235)
-        Note over Coord: Durable Decision Point
-        Coord->>Coord: Durably log decision = COMMIT<br/>Transition transfer state to COMMITTING
-    end
-
-    rect rgb(250, 240, 240)
-        Note over Coord, L2: Phase 2: Confirm / Settle (Forward Recovery)
-        Coord->>L1: source_confirm(transfer_id)
-        L1->>L1: Consume hold, post double-entry journal:<br/>Debit Source Cash / Credit Clearing Account
-        L1-->>Coord: 200 OK (Source Settled)
-
-        Coord->>L2: destination_confirm(transfer_id)
-        L2->>L2: Consume intent, post double-entry journal:<br/>Debit Clearing Account / Credit Recipient Cash
-        L2-->>Coord: 200 OK (Destination Settled)
-    end
-
-    Note over Coord: Transition state to SETTLED
-    Coord-->>Client: 200 OK (status: SETTLED)
+    Note over Coord,L2: Phase 2 — Confirm / Settle
+    Coord->>L1: Confirm source settlement (source_confirm)
+    L1-->>Coord: Source settled
+    Coord->>L2: Confirm destination settlement (destination_confirm)
+    L2-->>Coord: Destination settled
+    Coord-->>Client: Transfer settled
 ```
 
 ### Protocol Guarantees & Distinction from Database XA 2PC
@@ -188,16 +149,16 @@ sequenceDiagram
 
 Every financial operation in LedgerGuard is constrained by invariants enforced at the database and application levels:
 
-| Invariant | Mathematical / System Invariant | Enforcement Mechanism | Verification Suite |
-| :--- | :--- | :--- | :--- |
-| **Balanced Journal** | $\sum \text{lines} = 0 \text{ per currency}$ | PostgreSQL trigger `trg_verify_journal_balanced` validates that debits equal credits before commit. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
-| **Journal Immutability** | $\Delta \text{posted\_records} = \emptyset$ | PostgreSQL trigger `trg_prevent_journal_modification` raises an exception on `UPDATE`, `DELETE`, or `TRUNCATE`. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
-| **Integer Minor Units** | $\text{amount} \in [1, 10^{11}] \subset \mathbb{Z}^+$ | Domain validation in `AmountPaise` rejects negative values, zero, and floats. Database checks enforce `BIGINT > 0`. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
-| **No Double-Spending** | $\text{available} = \text{posted} - \text{held} \ge 0$ | Checked inside PL/pgSQL stored procedures with sorted row locks (`account_id ASC`). | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
-| **Idempotent Replay** | $f(k, payload) = f(k, payload)$ | Unique constraint on `(idempotency_key, scope)` with SHA-256 payload hash verification. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
-| **Forward Recovery** | $\text{decision} = \text{COMMIT} \implies \text{state} \to \text{SETTLED}$ | Autonomous orchestrator queries unconfirmed decisions and executes source-first settlement. | [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) |
-| **Compensating Reversals** | $\text{reversal} \implies \text{new compensating journal}$ | Reversals post a new balanced journal with a backlink reference (`reversal_of_journal_id`). | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
-| **Clearing Conservation** | $\sum_{i=1}^{N} \text{ClearingBalance}_i = 0$ | Cross-ledger reconciliation sums clearing account balances and verifies exact net zero conservation. | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) |
+| Invariant | Enforcement | Verified By |
+| :--- | :--- | :--- |
+| **Balanced Journal**<br>$\sum \text{lines}=0$ | Commit-time PostgreSQL trigger validates balanced lines per currency. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **Journal Immutability**<br>$\Delta \text{posted records} = \varnothing$ | Database trigger blocks `UPDATE`, `DELETE`, and `TRUNCATE` operations. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **Integer Minor Units**<br>$\text{amount} \in [1, 10^{11}] \subset \mathbb{Z}^+$ | Domain validation in `AmountPaise`; database checks enforce `BIGINT > 0`. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **No Double-Spending**<br>$\text{available} \ge 0$ | Sorted row locks (`account_id ASC`) inside PL/pgSQL procedures. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
+| **Idempotent Replay** | Unique constraint on `(idempotency_key, scope)` with SHA-256 payload hash verification. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
+| **Forward Recovery** | Autonomous orchestrator queries unconfirmed decisions and executes settlement. | [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) |
+| **Compensating Reversals** | Reversals post a new balanced journal with a backlink reference. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
+| **Clearing Conservation**<br>$\sum \text{Clearing} = 0$ | Cross-ledger audit verifies zero-sum clearing balances across ledgers. | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) |
 
 ---
 
@@ -489,16 +450,16 @@ LedgerGuard/
 
 The application is configured via environment variables. Copy `.env.example` to `.env` for local configuration:
 
-| Variable | Description | Safe Local Default |
+| Variable | Purpose | Local Value |
 | :--- | :--- | :--- |
 | `LEDGERGUARD_ENV` | Application environment profile (`local`, `test`, `production`) | `local` |
 | `FAULT_INJECTION_ENABLED` | Enables fault-injection endpoints for recovery testing | `false` |
-| `COORDINATOR_DB_URL` | Application connection string for Coordinator DB | `postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5442/coordinator_db` |
-| `COORDINATOR_ADMIN_DB_URL` | Migration runner connection string for Coordinator DB | `postgresql://ledgerguard_admin:ledgerguard_admin_secret@localhost:5442/coordinator_db` |
-| `LEDGER1_DB_URL` | Application connection string for Participant Ledger 1 | `postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5443/ledger1_db` |
-| `LEDGER1_ADMIN_DB_URL` | Migration runner connection string for Participant Ledger 1 | `postgresql://ledgerguard_admin:ledgerguard_admin_secret@localhost:5443/ledger1_db` |
-| `LEDGER2_DB_URL` | Application connection string for Participant Ledger 2 | `postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5444/ledger2_db` |
-| `LEDGER2_ADMIN_DB_URL` | Migration runner connection string for Participant Ledger 2 | `postgresql://ledgerguard_admin:ledgerguard_admin_secret@localhost:5444/ledger2_db` |
+| `COORDINATOR_DB_URL` | Application connection string for Coordinator DB | See `.env.example` |
+| `COORDINATOR_ADMIN_DB_URL` | Migration runner connection string for Coordinator DB | See `.env.example` |
+| `LEDGER1_DB_URL` | Application connection string for Participant Ledger 1 | See `.env.example` |
+| `LEDGER1_ADMIN_DB_URL` | Migration runner connection string for Participant Ledger 1 | See `.env.example` |
+| `LEDGER2_DB_URL` | Application connection string for Participant Ledger 2 | See `.env.example` |
+| `LEDGER2_ADMIN_DB_URL` | Migration runner connection string for Participant Ledger 2 | See `.env.example` |
 | `COORDINATOR_PORT` | HTTP port for the FastAPI coordinator service | `8010` |
 | `CONSOLE_PORT` | HTTP port for the Next.js operator console | `3300` |
 | `WORKER_POLL_INTERVAL_MS` | Polling interval for transactional outbox background worker | `200` |
@@ -511,11 +472,11 @@ The application is configured via environment variables. Copy `.env.example` to 
 Detailed specifications and architectural rationale are tracked in [`docs/`](docs/):
 
 - [ADR 0001: Immutable Double-Entry Journals & Role Segregation](docs/adr/0001-immutable-journals-and-role-separation.md)
-- [ADR 0002: Two-Phase Commit & Forward Recovery Invariant](docs/adr/0002-two-phase-commit-and-forward-recovery.md)
+- [ADR 0002: TCC Coordination & Forward Recovery Invariant](docs/adr/0002-two-phase-commit-and-forward-recovery.md)
 - [ADR 0003: Durable Tombstone Semantics & Unresolved Obligations](docs/adr/0003-tombstone-semantics-and-unresolved-obligations.md)
 - [ADR 0004: Multi-Database Reachability Probing & Clearing Reconciliation](docs/adr/0004-cross-ledger-clearing-reconciliation.md)
 - [System Architecture Specification](docs/architecture/system_architecture.md)
-- [Transfer Protocol & State Machines](docs/architecture/protocol_2pc.md)
+- [TCC Transfer Protocol & State Machines](docs/architecture/protocol_2pc.md)
 - [Data Models & Schemas](docs/architecture/data_models.md)
 - [Benchmark Baseline Report](docs/benchmarks/baseline_report.md)
 - [Demonstration & Walkthrough Script](docs/DEMO_SCRIPT.md)
