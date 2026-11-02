@@ -1,224 +1,533 @@
+<div align="center">
+
 # LedgerGuard
 
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
-[![PostgreSQL 17](https://img.shields.io/badge/postgresql-17-blue.svg)](https://www.postgresql.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
-[![Next.js 15](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<p><strong>A multi-database financial ledger and operator console demonstrating immutable double-entry bookkeeping, TCC-style reserve/confirm/cancel transfer coordination, and continuous cross-ledger reconciliation.</strong></p>
 
-LedgerGuard is a portfolio implementation of a double-entry wallet ledger that demonstrates immutable journals, concurrency-safe spending, idempotent APIs, durable application-level transfer coordination (TCC-style reserve/confirm/cancel), failure recovery, and multi-database reconciliation.
+<p><em>Built with Python 3.12, FastAPI, PostgreSQL 17, and Next.js 15.</em></p>
 
----
+<p>
+  <a href="https://github.com/simply-mihir/LedgerGuard"><img src="https://img.shields.io/badge/GitHub-simply--mihir%2FLedgerGuard-181717?logo=github&logoColor=white" alt="GitHub Repository"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python 3.12+"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
+  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 17"></a>
+  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15.5-000000?logo=next.js&logoColor=white" alt="Next.js 15.5"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black" alt="React 18.3"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.4+-3178C6?logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/Docker-Compose_v2-2496ED?logo=docker&logoColor=white" alt="Docker Compose"></a>
+  <a href="https://docs.pytest.org/"><img src="https://img.shields.io/badge/Pytest-8.3-0A9EDC?logo=pytest&logoColor=white" alt="Pytest 8.3"></a>
+  <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/badge/Ruff-0.7+-D7FF64?logo=ruff&logoColor=black" alt="Ruff"></a>
+  <a href="https://mypy-lang.org/"><img src="https://img.shields.io/badge/mypy-1.13-2E64FE" alt="Mypy"></a>
+</p>
 
-## 1. System Topology & Core Invariants
-
-LedgerGuard operates across three isolated PostgreSQL 17 instances:
-- **Coordinator Database (`coordinator_db` on host port 5442)**: Customer directory, idempotent routing, durable transfer decisions (`COMMIT` / `CANCEL`), and transaction outbox.
-- **Participant Ledger 1 (`ledger1_db` on host port 5443)**: Independent accounting kernel, customer wallets, holds escrow, and Inter-Ledger Clearing Control.
-- **Participant Ledger 2 (`ledger2_db` on host port 5444)**: Independent accounting kernel, customer wallets, incoming intents, and Inter-Ledger Clearing Control.
-
-```
-                     ┌──────────────────────────────────┐
-                     │   Next.js 15 Operator Console    │
-                     │       (http://localhost:3300)    │
-                     └─────────────────┬────────────────┘
-                                       │ HTTP / Operator APIs
-                                       ▼
-                     ┌──────────────────────────────────┐
-                     │       FastAPI Coordinator        │
-                     │       (http://localhost:8010)    │
-                     └───────┬──────────────┬───────────┘
-                             │              │
-           Phase 1 & 2 TCC   │              │   Phase 1 & 2 TCC
-         (Source Prepare/    │              │ (Dest Prepare/
-             Confirm)        │              │     Confirm)
-                             ▼              ▼
-                    ┌────────────────┐  ┌────────────────┐
-                    │ Ledger 1 DB    │  │ Ledger 2 DB    │
-                    │ (Port 5443)    │  │ (Port 5444)    │
-                    └────────────────┘  └────────────────┘
-```
-
-### Financial Invariants that Survive Every Refactor
-
-1. **Integer Minor Units (Paise, INR):** Bounded positive integers `[1, 100_000_000_000]`. Floating-point conversion and float/boolean types are strictly rejected.
-2. **Double-Entry Bookkeeping:** Every committed journal has $\ge 2$ lines and balances to exact zero per currency (`trg_verify_journal_balanced`).
-3. **Database Engine Immutability:** Financial tables (`journal_headers`, `journal_lines`) reject `UPDATE`, `DELETE`, and `TRUNCATE` operations via database mutation triggers. The application connection role (`ledgerguard_app`) is denied direct table DML and must invoke stored procedures (`post_journal`, `update_account_status`).
-4. **Deterministic Account Locking:** Account balances are locked in sorted order (`account_id ASC`) inside PL/pgSQL stored procedures. Network calls never occur inside locked transactions.
-5. **Application-Level Reserve/Confirm/Cancel Coordination:** Source prepare reserves funds (creates `ACTIVE` hold); destination prepare accepts incoming obligation. Once coordinator decision `COMMIT` is durably written, the engine **recovers forward to settlement**. Rollbacks or refunds after `COMMIT` are architecturally prohibited. (Note: Relies on locally atomic database transactions on each participant, not PostgreSQL `PREPARE TRANSACTION`).
-6. **Durable Tombstone Semantics:** When `CANCEL` arrives before `PREPARE` due to message reordering, a durable `CANCELLED` tombstone is written, causing delayed prepare requests to reject with zero funds locked.
-7. **In-Flight Obligation Protection:** Account closure (`CLOSED`) is strictly blocked if the account has a non-zero balance, active holds, or unresolved `PREPARED` transfer intents (`006_closure_unresolved_obligations.sql`).
-8. **Cross-Ledger Clearing Conservation:** Inter-ledger clearing balances sum to zero across all participants:
-   $$\sum_{i=1}^{N} \text{ClearingBalance}_i = 0$$
+</div>
 
 ---
 
-## 2. Prerequisites & Quickstart
+## Table of Contents
 
-### Prerequisites
-- macOS or Linux
-- Python 3.12+ with [`uv`](https://github.com/astral-sh/uv)
-- Docker Engine & Docker Compose v2
-- Node.js 20+ & npm
-
-### Setup Environment
-```bash
-# Clone and enter directory
-cd LedgerGuard
-
-# Configure environment variables
-cp .env.example .env
-
-# Install Python dependencies with uv
-uv sync --extra dev
-
-# Install Next.js operator console dependencies from committed lockfile
-cd apps/console && npm ci && cd ../..
-```
-
-> [!IMPORTANT]
-> **Security Notice:** The passwords, secrets, and connection strings documented in `.env.example`, `docker-compose.yml`, and `docker/init-roles.sql` (e.g. `ledgerguard_app_secret`, `ledgerguard_admin_secret`) are strictly local development credentials intended for isolated offline evaluation and testing. They must be replaced with securely generated secrets outside isolated local use. By default, `docker-compose.yml` binds PostgreSQL host ports exclusively to loopback (`127.0.0.1`), and production mode strictly disables fault-injection APIs (`POST /v1/operator/experiments/run` returns HTTP 403 Forbidden). Real `.env` files are excluded by `.gitignore`.
-
-### Launch PostgreSQL 17 Databases
-```bash
-# Start isolated containers for coordinator, ledger1, and ledger2 (bound to 127.0.0.1)
-docker compose up -d
-
-# Check container health status
-docker compose ps
-```
-
-### Apply SQL Migrations
-```bash
-uv run python -m ledgerguard.cli db migrate
-```
+- [Project Overview](#project-overview)
+- [Key Features](#key-features)
+- [System Architecture](#system-architecture)
+- [Transfer Protocol](#transfer-protocol)
+- [Accounting & Recovery Invariants](#accounting--recovery-invariants)
+- [Failure Recovery Scenario](#failure-recovery-scenario)
+- [Operator Console](#operator-console)
+- [Technology Stack](#technology-stack)
+- [Quick Start](#quick-start)
+- [Verification & Test Suite](#verification--test-suite)
+- [Benchmark Baseline](#benchmark-baseline)
+- [Project Structure](#project-structure)
+- [Security & Scope Disclosures](#security--scope-disclosures)
+- [Environment Configuration](#environment-configuration)
+- [Documentation & Decision Records](#documentation--decision-records)
+- [License](#license)
 
 ---
 
-## 3. Running Verification & Acceptance Tests
+## Project Overview
 
-Execute the complete test suite against live PostgreSQL 17 instances:
+**LedgerGuard** is an educational and portfolio reference implementation of a multi-database financial ledger and operator console. It demonstrates how distributed systems principles and database constraints combine to enforce accounting integrity across autonomous storage boundaries.
 
-```bash
-# Run all 54 automated integration, failure, and property tests
-uv run pytest tests/ -v
+The core architecture coordinates balance movements across three isolated PostgreSQL 17 database instances: a **Coordinator** managing account routing and durable decision logs, and two independent **Participant Ledgers** maintaining localized double-entry accounting kernels. Distributed transfers use an application-level **Try-Confirm-Cancel (TCC)** workflow with durable forward recovery rather than classical distributed transaction managers (XA 2PC). Each participant operation executes and commits as an independent, locally atomic PostgreSQL transaction, preventing distributed lock stalls across network calls while ensuring that once a transfer decision is logged, the system recovers forward to settlement with zero duplicate financial effect.
 
-# Run code style & lint checking
-uv run ruff check .
+---
 
-# Run static type checking across all packages
-uv run mypy src
+## Key Features
 
-# Build and validate Next.js operator console
-cd apps/console && npm run build && cd ../..
-```
+### Core Capabilities
 
-### Test Suite Breakdown
-| Test Suite | Tests | Description |
+| Capability | Implementation & Mechanism | Verified Guarantee |
 | :--- | :--- | :--- |
-| `test_accounting_kernel.py` | 14 | Amount bounds, immutable journal triggers, role permissions, zero-balance closure. |
-| `test_local_transfers.py` | 9 | Atomic local transfers, idempotency fingerprints, 100 concurrent withdrawals of 80 against 100, reversals. |
-| `test_durable_workflow.py` | 7 | Transactional outbox engine, durable decisions, command inbox deduplication, holds lifecycle. |
-| `test_distributed_failures.py` | 11 | Complete 2PC failure matrix: lost prepare replies, crash after COMMIT, crash between confirms, freeze/closure invariants, retry idempotency. |
-| `test_audit_reconciliation.py` | 4 | Multi-database reachability probing, corrupted hold cache detection, stopped-and-drained audit. |
-| `test_operator_api.py` | 5 | Operator REST endpoints, overview stats, timeline inspection, public-safe experiment blocking. |
-| `test_reference_model.py` | 1 | Hypothesis property-based testing verifying execution agreement against a reference state model. |
-| `test_smoke.py` | 3 | Real PostgreSQL 17 connectivity, migration tracking, and role boundary verification. |
+| **Immutable Double-Entry** | Database triggers (`trg_prevent_journal_modification`) reject `UPDATE`, `DELETE`, and `TRUNCATE` on journals. | Posted records cannot be mutated or purged; corrections require explicit compensating entries. |
+| **Balanced Postings** | Trigger `trg_verify_journal_balanced` checks that each journal has $\ge 2$ lines and balances to exact zero per currency. | $\sum \text{amount} = 0$ enforced at transaction commit time. |
+| **Integer Minor Units** | Domain model `AmountPaise` represents currency in integer paise within $[1, 100\,000\,000\,000]$. | Eliminates floating-point rounding errors; float/boolean inputs are strictly rejected. |
+| **Concurrency Control** | Row-level locking ordered by `account_id ASC` (`SELECT ... FOR UPDATE`) in PL/pgSQL procedures. | Eliminates deadlocks between concurrent bidirectional transfers; prevents double-spending. |
+| **Idempotent APIs** | Request hashing with canonical SHA-256 fingerprints stored in `idempotency_keys` table. | Identical requests return cached responses; modified payloads return `409 Conflict`. |
+| **TCC Transfer Coordination** | Two-phase workflow: Phase 1 reserves funds (hold) and registers intent; Phase 2 settles. | Decentralized coordination without distributed database locks; zero premature refunds after commit. |
+| **Continuous Reconciliation** | Multi-database audit engine checking inter-ledger clearing conservation ($\sum \text{Clearing} = 0$). | Identifies ledger discrepancies and orphaned holds; detects partial cluster reachability. |
+
+### Engineering Depth
+
+| Mechanism | Description | System Location |
+| :--- | :--- | :--- |
+| **Transactional Outbox** | Events written in the same transaction as state changes; polled via `SELECT ... FOR UPDATE SKIP LOCKED`. | [`src/ledgerguard/worker/outbox.py`](src/ledgerguard/worker/outbox.py) |
+| **Command Inbox** | Participants deduplicate incoming commands by unique command ID before execution. | [`migrations/ledger/005_intents_holds_inbox_outbox.sql`](migrations/ledger/005_intents_holds_inbox_outbox.sql) |
+| **Cancellation Tombstones** | Out-of-order `CANCEL` writes a durable tombstone, causing late `PREPARE` messages to safely reject. | [`docs/adr/0003-tombstone-semantics-and-unresolved-obligations.md`](docs/adr/0003-tombstone-semantics-and-unresolved-obligations.md) |
+| **Unresolved Obligation Guards** | Account closure (`CLOSED`) is blocked by triggers if active holds or prepared intents exist. | [`migrations/ledger/006_closure_unresolved_obligations.sql`](migrations/ledger/006_closure_unresolved_obligations.sql) |
+| **PostgreSQL Role Separation** | Migration owner (`ledgerguard_admin`) vs application runtime (`ledgerguard_app`). | Direct table DML denied to app role; execution restricted to stored functions. |
+| **Property-Based Testing** | Hypothesis stateful testing verifying that parallel transfers match an in-memory reference model. | [`tests/test_reference_model.py`](tests/test_reference_model.py) |
 
 ---
 
-## 4. Signature Scenario Demo: Interrupted 2PC Recovery
+## System Architecture
 
-Execute the standalone, deterministic failure scenario script:
+The following diagram illustrates the deployment topology, runtime components, and storage boundaries across isolated PostgreSQL 17 instances:
+
+```mermaid
+flowchart TD
+    subgraph Clients["User & Operator Interfaces"]
+        UI["Next.js 15 Operator Console<br/><code>http://localhost:3300</code>"]
+        API_Client["API Consumer / Client Application"]
+    end
+
+    subgraph Service["Application & Workflow Layer"]
+        API["FastAPI Operator & Transfer API<br/><code>http://127.0.0.1:8010</code>"]
+        TC["Transfer Coordinator<br/>(TCC Engine)"]
+        Worker["Outbox / Inbox Recovery Worker"]
+        Audit["Continuous Reconciliation Engine"]
+    end
+
+    subgraph Storage["Isolated Database Layer (PostgreSQL 17)"]
+        CoordDB[("Coordinator DB<br/><code>:5442</code><br/>Directory & Decisions")]
+        Ledger1DB[("Participant Ledger 1 DB<br/><code>:5443</code><br/>Accounting Kernel & Holds")]
+        Ledger2DB[("Participant Ledger 2 DB<br/><code>:5444</code><br/>Accounting Kernel & Intents")]
+    end
+
+    UI -->|HTTP / REST| API
+    API_Client -->|HTTP / REST| API
+    API --> TC
+    TC -->|Idempotency & Decisions| CoordDB
+    TC -->|Phase 1 & 2 Local Calls| Ledger1DB
+    TC -->|Phase 1 & 2 Local Calls| Ledger2DB
+
+    Worker -->|Poll Unconfirmed Decisions| CoordDB
+    Worker -->|Forward Recovery| Ledger1DB
+    Worker -->|Forward Recovery| Ledger2DB
+
+    Audit -->|Audit Probing & Clearing Verification| CoordDB
+    Audit -->|Audit Probing & Clearing Verification| Ledger1DB
+    Audit -->|Audit Probing & Clearing Verification| Ledger2DB
+```
+
+### Why Independent Databases and Durable Messaging Matter
+
+In distributed financial architectures, individual ledgers often represent distinct legal entities, clearinghouses, or microservice failure domains. Holding database connections or distributed locks across independent networks introduces severe operational coupling: a slow query or network partition in one ledger can exhaust connection pools and freeze unrelated transfers across the cluster.
+
+LedgerGuard eliminates distributed locking by treating each ledger as an autonomous system. Balance reservations and journal postings commit in local database transactions. Inter-ledger consistency is maintained via durable decision logging at the coordinator and transactional outbox/inbox worker recovery.
+
+---
+
+## Transfer Protocol
+
+Cross-ledger transfers execute using an application-level **Try-Confirm-Cancel (TCC)** protocol with source-first settlement and forward recovery:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as API Client
+    participant Coord as Coordinator DB (:5442)
+    participant L1 as Source Ledger DB (:5443)
+    participant L2 as Dest Ledger DB (:5444)
+
+    Client->>Coord: POST /v1/transfers (Idempotency-Key)
+    Note over Coord: Validate payload & hash fingerprint<br/>Record transfer intent (state: ACCEPTED)
+
+    rect rgb(235, 240, 250)
+        Note over Coord, L2: Phase 1: Try / Reserve (Distributed Prepare)
+        Coord->>L1: source_prepare(transfer_id, amount)
+        L1->>L1: Verify balance, lock row (account_id ASC)<br/>Create ACTIVE hold, reduce available balance
+        L1-->>Coord: 200 OK (Hold Reserved)
+
+        Coord->>L2: destination_prepare(transfer_id, amount)
+        L2->>L2: Verify recipient active<br/>Record PREPARED transfer intent
+        L2-->>Coord: 200 OK (Obligation Accepted)
+    end
+
+    rect rgb(235, 250, 235)
+        Note over Coord: Durable Decision Point
+        Coord->>Coord: Durably log decision = COMMIT<br/>Transition transfer state to COMMITTING
+    end
+
+    rect rgb(250, 240, 240)
+        Note over Coord, L2: Phase 2: Confirm / Settle (Forward Recovery)
+        Coord->>L1: source_confirm(transfer_id)
+        L1->>L1: Consume hold, post double-entry journal:<br/>Debit Source Cash / Credit Clearing Account
+        L1-->>Coord: 200 OK (Source Settled)
+
+        Coord->>L2: destination_confirm(transfer_id)
+        L2->>L2: Consume intent, post double-entry journal:<br/>Debit Clearing Account / Credit Recipient Cash
+        L2-->>Coord: 200 OK (Destination Settled)
+    end
+
+    Note over Coord: Transition state to SETTLED
+    Coord-->>Client: 200 OK (status: SETTLED)
+```
+
+### Protocol Guarantees & Distinction from Database XA 2PC
+
+- **Application-Level TCC vs. XA 2PC:** Classical database XA 2PC keeps database transactions open between Phase 1 (`PREPARE TRANSACTION`) and Phase 2 (`COMMIT PREPARED`), holding table and row locks across network round-trips. In LedgerGuard, all participant operations (`source_prepare`, `destination_prepare`, `source_confirm`, `destination_confirm`) execute as separate, locally atomic PostgreSQL transactions that commit immediately.
+- **Durable Decision Invariant:** Once the coordinator commits the `COMMIT` record to `transfer_decisions`, the outcome is immutable. Even if the coordinator crashes immediately afterward, the transfer is never rolled back or refunded to the source.
+- **Autonomous Forward Recovery:** Background workers inspect unconfirmed transfers in `COMMITTING` state and re-deliver Phase 2 confirmations until both ledgers reach settlement.
+- **Tombstone Semantics:** If a cancellation arrives at a participant before the corresponding prepare (due to network reordering), a durable `CANCELLED` tombstone is written. Any subsequent delayed prepare is rejected immediately with zero funds reserved.
+
+---
+
+## Accounting & Recovery Invariants
+
+Every financial operation in LedgerGuard is constrained by invariants enforced at the database and application levels:
+
+| Invariant | Mathematical / System Invariant | Enforcement Mechanism | Verification Suite |
+| :--- | :--- | :--- | :--- |
+| **Balanced Journal** | $\sum \text{lines} = 0 \text{ per currency}$ | PostgreSQL trigger `trg_verify_journal_balanced` validates that debits equal credits before commit. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **Journal Immutability** | $\Delta \text{posted\_records} = \emptyset$ | PostgreSQL trigger `trg_prevent_journal_modification` raises an exception on `UPDATE`, `DELETE`, or `TRUNCATE`. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **Integer Minor Units** | $\text{amount} \in [1, 10^{11}] \subset \mathbb{Z}^+$ | Domain validation in `AmountPaise` rejects negative values, zero, and floats. Database checks enforce `BIGINT > 0`. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **No Double-Spending** | $\text{available} = \text{posted} - \text{held} \ge 0$ | Checked inside PL/pgSQL stored procedures with sorted row locks (`account_id ASC`). | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
+| **Idempotent Replay** | $f(k, payload) = f(k, payload)$ | Unique constraint on `(idempotency_key, scope)` with SHA-256 payload hash verification. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
+| **Forward Recovery** | $\text{decision} = \text{COMMIT} \implies \text{state} \to \text{SETTLED}$ | Autonomous orchestrator queries unconfirmed decisions and executes source-first settlement. | [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) |
+| **Compensating Reversals** | $\text{reversal} \implies \text{new compensating journal}$ | Reversals post a new balanced journal with a backlink reference (`reversal_of_journal_id`). | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
+| **Clearing Conservation** | $\sum_{i=1}^{N} \text{ClearingBalance}_i = 0$ | Cross-ledger reconciliation sums clearing account balances and verifies exact net zero conservation. | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) |
+
+---
+
+## Failure Recovery Scenario
+
+LedgerGuard includes a deterministic failure demonstration script illustrating crash resilience and forward recovery:
 
 ```bash
 ./scripts/demo_signature_recovery.sh
 ```
 
-**Demonstration Sequence:**
-1. Provisions Alice on Ledger 1 (funded with ₹1,000.00) and Bob on Ledger 2 (₹0.00).
-2. Initiates cross-ledger transfer of ₹400.00 with failpoint `FAIL_AFTER_COMMIT_BEFORE_SOURCE_CONFIRM`.
-3. Injects fatal coordinator crash immediately after the `COMMIT` decision is durably logged to disk.
-4. Inspects interrupted state:
-   - Coordinator Decision: Committed as `COMMIT`
-   - Alice Hold on Ledger 1: ₹400.00 actively reserved (not refunded)
-   - Alice Available: Reduced to ₹600.00
-   - Bob on Ledger 2: Not yet credited
-5. Starts autonomous forward recovery worker:
-   - Slices through Phase 2 confirmations (source settlement $\rightarrow$ destination settlement).
-6. Verifies final end-state:
-   - Alice Final: ₹600.00, active hold: ₹0.00
-   - Bob Final: ₹400.00 (exact single credit)
-   - Inter-Ledger Clearing Delta: $\Delta L_1 + \Delta L_2 = 0$ (exact conservation).
+### Demonstration Sequence: Interrupted TCC Recovery
+
+1. **Provisioning:** Creates source account Alice on Ledger 1 (funded with ₹1,000.00) and destination account Bob on Ledger 2 (₹0.00).
+2. **Transfer Initiation:** Submits a ₹400.00 transfer with failpoint `FAIL_AFTER_COMMIT_BEFORE_SOURCE_CONFIRM`.
+3. **Simulated Crash:** The coordinator executes Phase 1 (reserving ₹400.00 on Ledger 1), durably writes `decision = COMMIT`, and simulates a crash before Phase 2 confirmation commands are sent.
+4. **Invariant Inspection During Outage:**
+   - Coordinator transfer state: `COMMITTING` (Decision committed on disk).
+   - Alice hold on Ledger 1: `ACTIVE` hold of ₹400.00 preserved (no premature refund).
+   - Alice available balance: Reduced to ₹600.00.
+   - Bob balance on Ledger 2: ₹0.00 (awaiting confirmation).
+5. **Forward Recovery:** Autonomous recovery worker detects the unconfirmed transfer, executes source confirmation, then destination confirmation.
+6. **Final State Verification:**
+   - Alice final balance: ₹600.00 (Active hold: ₹0.00).
+   - Bob final balance: ₹400.00 (Exact credit).
+   - Inter-ledger clearing: $\Delta L_1 (-₹400.00) + \Delta L_2 (+₹400.00) = ₹0.00$ (exact conservation).
 
 ---
 
-## 5. Running Workload Benchmarks
+## Operator Console
 
-Execute the automated benchmark runner:
+LedgerGuard includes a Next.js 15 operator console providing visibility into ledger health, accounts, transfers, and reconciliation:
+
+| Screen | Primary Functionality | Operator Controls |
+| :--- | :--- | :--- |
+| **Overview** | System topology, database reachability indicators, aggregate assets, liabilities, and clearing sum. | Auto-refresh toggle, manual refresh, cluster status cards. |
+| **Accounts Explorer** | Multi-ledger directory of customer wallets with posted, held, and available balances. | Account status filters, double-entry statement ledger modal. |
+| **Transfer Explorer** | Transaction audit feed displaying transfer lifecycle states and workflow event timelines. | Transfer detail modal, TCC transfer lifecycle stepper, manual reversal action. |
+| **Reconciliation Runner** | On-demand cross-database audit verifying inter-ledger clearing balances and active holds. | "Run Reconciliation" trigger, partial reachability detection, discrepancy viewer. |
+| **Experiment Console** | Interactive failure-injection testbed simulating coordinator crashes and network timeouts. | Preset fault injection scenarios, execution stepper, final invariant inspection. |
+
+---
+
+## Technology Stack
+
+| Layer | Component | Version | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Backend** | Python | 3.12+ | Core programming language |
+| | FastAPI | 0.115+ | High-performance asynchronous REST API framework |
+| | Psycopg 3 | 3.2+ | Native PostgreSQL driver with connection pooling (`psycopg_pool`) |
+| | Pydantic | 2.9+ | Strict type validation and domain schema enforcement |
+| **Database** | PostgreSQL | 17-alpine | Primary relational storage engine across 3 isolated instances |
+| | PL/pgSQL | 17 | Atomic stored procedures, mutation triggers, and row-level locks |
+| **Workflow & Reliability** | Transactional Outbox | Custom | Reliable asynchronous event publication via `SKIP LOCKED` |
+| | Command Inbox | Custom | At-least-once command deduplication on participant ledgers |
+| | TCC Coordinator | Custom | Two-phase reserve/confirm/cancel coordinator with forward recovery |
+| **Testing & Quality** | Pytest | 8.3+ | Automated test runner with async fixture support |
+| | Hypothesis | 6.115+ | Property-based testing against an in-memory reference model |
+| | Ruff | 0.7+ | Fast Python linter and code formatter |
+| | Mypy | 1.13+ | Static type checker verifying strict typing across 27 source files |
+| **Frontend** | Next.js | 15.5.28 | React App Router frontend framework |
+| | React / React DOM | 18.3.1 | UI component rendering library |
+| | TypeScript | 5.4+ | Typed client application code |
+| | PostCSS | 8.5.32 | CSS processing (overridden to resolve security advisories) |
+| **Tooling & Infra** | Docker & Compose | v2 | Container orchestration for isolated database instances |
+| | Astral uv | Latest | Fast Python package management and virtual environment tooling |
+| | Make | Standard | Consolidated developer task automation |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- macOS or Linux
+- Python 3.12+ with [`uv`](https://github.com/astral-sh/uv)
+- Docker Engine & Docker Compose v2
+- Node.js 20+ & npm
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/simply-mihir/LedgerGuard.git
+cd LedgerGuard
+```
+
+### 2. Configure Environment
+
+```bash
+cp .env.example .env
+```
+
+> [!NOTE]
+> The credentials documented in `.env.example` and `docker-compose.yml` (e.g. `ledgerguard_app_secret`, `ledgerguard_admin_secret`) are disposable defaults intended exclusively for isolated local development and testing. Real `.env` files are excluded by `.gitignore`.
+
+### 3. Start PostgreSQL 17 Databases
+
+Start the three isolated database containers (Coordinator, Ledger 1, Ledger 2):
+
+```bash
+docker compose up -d
+```
+
+Verify that all three database containers report healthy:
+
+```bash
+docker compose ps
+```
+
+*Note: Database ports bind exclusively to loopback (`127.0.0.1:5442`, `127.0.0.1:5443`, `127.0.0.1:5444`) to prevent external network exposure.*
+
+### 4. Install Dependencies
+
+Install Python dependencies in a managed virtual environment:
+
+```bash
+uv sync --extra dev
+```
+
+Install Next.js console dependencies:
+
+```bash
+cd apps/console
+npm ci
+cd ../..
+```
+
+### 5. Apply Database Migrations
+
+Apply database schemas and stored procedures across all three database instances:
+
+```bash
+uv run python -m ledgerguard.cli migrate --target all
+```
+
+### 6. Start the API Server
+
+Launch the FastAPI coordinator and operator service bound to loopback:
+
+```bash
+uv run uvicorn ledgerguard.api.app:app --host 127.0.0.1 --port 8010 --reload
+```
+
+- API Health Check: `http://127.0.0.1:8010/health`
+- Interactive OpenAPI Docs: `http://127.0.0.1:8010/docs`
+
+### 7. Launch the Operator Console
+
+In a separate terminal, start the Next.js development server:
+
+```bash
+cd apps/console
+npm run dev
+```
+
+Open **[http://localhost:3300](http://localhost:3300)** in your browser to access the operator console.
+
+### 8. Stopping the Environment
+
+To stop the database containers:
+
+```bash
+docker compose down
+```
+
+---
+
+## Verification & Test Suite
+
+The test suite validates accounting correctness, concurrency safety, failure recovery, and reconciliation across live PostgreSQL 17 instances.
+
+### Current Repository Baseline (Verified November 2026)
+
+- **Pytest Suite:** 54 passing tests in ~11 seconds (`uv run pytest -ra -W error`)
+- **Linting:** 0 Ruff errors (`uv run ruff check .`)
+- **Type Checking:** 0 Mypy errors across 27 source files (`uv run mypy src`)
+- **Console Build:** Clean Next.js 15 production build (`npm run build`)
+- **Production Vulnerabilities:** 0 vulnerabilities (`npm audit --omit=dev`)
+- **Signature Recovery Demo:** 8/8 steps and 15/15 checkpoints passing (`./scripts/demo_signature_recovery.sh`)
+
+### Execute Verification Commands
+
+```bash
+# Run complete test suite
+uv run pytest -ra -W error
+
+# Run code style and lint checks
+uv run ruff check .
+
+# Run static type checker
+uv run mypy src
+
+# Run signature recovery demonstration
+./scripts/demo_signature_recovery.sh
+
+# Build Next.js operator console
+cd apps/console && npm run build && cd ../..
+```
+
+### Test Suite Map
+
+| Test Module | Tests | Primary Verification Scope |
+| :--- | :---: | :--- |
+| [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) | 14 | Integer paise bounds, balanced double-entry trigger, journal immutability triggers, role permission boundaries, zero-balance closure rules. |
+| [`tests/test_local_transfers.py`](tests/test_local_transfers.py) | 9 | Atomic intra-ledger transfers, idempotency fingerprints, 100 concurrent race spends against balance limit, compensating reversals. |
+| [`tests/test_durable_workflow.py`](tests/test_durable_workflow.py) | 7 | Transactional outbox polling via `SKIP LOCKED`, durable coordinator decisions, command inbox deduplication, holds reservation lifecycle. |
+| [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) | 11 | TCC-style failure matrix: lost prepare replies, crash after `COMMIT`, crash between confirms, frozen/closed account rejections, idempotency retries. |
+| [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) | 4 | Multi-database reachability probing, corrupted hold cache detection, stopped-and-drained full cluster audit. |
+| [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
+| [`tests/test_reference_model.py`](tests/test_reference_model.py) | 1 | Hypothesis stateful property tests comparing concurrent multi-account execution against an in-memory reference model. |
+| [`tests/test_smoke.py`](tests/test_smoke.py) | 3 | Live PostgreSQL 17 connectivity, migration tracking tables, application connection role boundary enforcement. |
+| **Total** | **54** | **100% Passing** |
+
+---
+
+## Benchmark Baseline
+
+Workload benchmarks measure transaction throughput, acceptance versus settlement latencies, and query plan characteristics against live PostgreSQL 17 instances:
 
 ```bash
 uv run python scripts/run_benchmarks.py
 ```
 
-- Measures **Uniform Workload** (32.1 TPS) vs **Hot-Account Workload** (38.2 TPS, 80% concentration) across 60 successful settled transfers each under a single-threaded sequential client.
-- Discloses inferred **Acceptance Latency** (p50: ~7.1 ms) vs **Settlement Latency** (p50: ~18.5 ms).
-- Executes `EXPLAIN (ANALYZE, BUFFERS)` query execution plans directly on PostgreSQL 17.
-- Emits markdown baseline report to [`docs/benchmarks/baseline_report.md`](docs/benchmarks/baseline_report.md).
+### Performance Observations (Darwin x86_64, 12 Cores, 16 GB RAM)
 
-> In this sequential benchmark, the hot-account workload was slightly faster, likely because repeated access improved buffer and application-level locality while the single-threaded driver introduced no concurrent row-lock contention. The benchmark does not predict hot-account performance under concurrent load, where lock serialization may reduce throughput. Synchronous execution ensured 0 rejections and 0 retries; background queue-drain time was not separately benchmarked.
+| Workload Scenario | Completed Transfers | Success Rate | Sequential Throughput | Acceptance Latency (p50) | Settlement Latency (p50) | Total Latency (p50) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Uniform Distribution** | 60 | 100.0% | **32.08 TPS** | 7.43 ms | 19.11 ms | 26.54 ms |
+| **Hot Account (80% Concentration)** | 60 | 100.0% | **38.19 TPS** | 6.91 ms | 17.76 ms | 24.67 ms |
 
----
-
-## 6. Running the Operator Console & API Server
-
-### Start Coordinator API Server
-```bash
-uv run uvicorn ledgerguard.api.app:app --host 0.0.0.0 --port 8010 --reload
-```
-
-### Start Next.js Console
-```bash
-cd apps/console
-npm run dev
-```
-Open **[http://localhost:3300](http://localhost:3300)** to view the 5 operator screens:
-1. **Overview:** System topology, total ledgered assets, liabilities, clearing sum, reachability indicator.
-2. **Accounts:** Multi-ledger account explorer with status filters and full double-entry statement modals.
-3. **Transfer Explorer:** Transaction history with 2PC lifecycle stepper (Prepared, Decided, Confirmed, Settled).
-4. **Reconciliation:** Real-time cross-database audit runner with Stopped-and-Drained verification.
-5. **Experiments:** Interactive fault injection controls with live invariant inspection.
+*Disclaimer: Benchmark figures represent single-threaded sequential client execution on local hardware for baseline comparison. Results will vary depending on host hardware, virtualization layers, container configurations, and concurrent workload distribution. Under multi-client concurrent execution, hot accounts will serialize on row locks, resulting in elevated wait times.*
 
 ---
 
-## 7. Architecture Documentation & Decision Records
+## Project Structure
 
-Detailed specifications and architectural decision records are located in `docs/`:
+```
+LedgerGuard/
+├── .env.example                               # Local environment configuration template
+├── docker-compose.yml                         # 3-instance PostgreSQL 17 topology
+├── Makefile                                   # Development automation targets
+├── pyproject.toml                             # Python package manifest, dependencies & tool configs
+├── apps/
+│   └── console/                               # Next.js 15 operator console
+│       ├── app/
+│       │   ├── globals.css                    # Console design system & styling
+│       │   ├── layout.tsx                     # Root layout & navigation header
+│       │   └── page.tsx                       # Operator dashboard (5 interactive screens)
+│       └── package.json                       # Next.js, React 18, TypeScript dependencies
+├── docker/
+│   └── init-roles.sql                         # PostgreSQL roles (ledgerguard_admin, ledgerguard_app)
+├── docs/
+│   ├── DEMO_SCRIPT.md                         # Presentation walkthrough & live demo guide
+│   ├── adr/                                   # Architectural Decision Records (ADRs 0001–0004)
+│   ├── architecture/                          # Architecture, protocol, and data model specifications
+│   └── benchmarks/                            # Performance baseline reports and query execution plans
+├── migrations/
+│   ├── coordinator/                           # Coordinator schema migrations (directory, decisions, outbox)
+│   └── ledger/                                # Participant ledger migrations (journals, holds, inbox, triggers)
+├── scripts/
+│   ├── demo_signature_recovery.py             # Deterministic failure injection & forward recovery demo
+│   ├── demo_signature_recovery.sh             # Shell runner for the signature recovery demo
+│   └── run_benchmarks.py                      # Workload benchmark runner & EXPLAIN ANALYZE generator
+├── src/
+│   └── ledgerguard/
+│       ├── api/                               # FastAPI app factory, routes, auth, and schemas
+│       ├── coordinator/                       # Transfer coordinator, directory service, failpoints
+│       ├── db/                                # Migration runner and connection pool management
+│       ├── domain/                            # Money types, journal templates, idempotency models
+│       ├── participant/                       # Account service, posting engine, workflow handlers
+│       └── worker/                            # Outbox polling, inbox processing, orchestrator recovery
+└── tests/                                     # 54 automated integration, failure, and property tests
+```
+
+---
+
+## Security & Scope Disclosures
+
+- **Simulated Financial Environment:** LedgerGuard is an educational reference implementation designed for portfolio and architectural evaluation. It is not connected to live payment rails (UPI, IMPS, NEFT, RTGS, or SWIFT) and does not provide regulatory compliance (e.g., PCI-DSS, SOC 2, or RBI guidelines).
+- **Single-Currency Kernel:** The core accounting kernel operates in integer Indian Rupee paise (`INR`). Multi-currency ledgers require foreign-exchange clearing legs.
+- **Local Network Isolation:** Database ports in `docker-compose.yml` bind to loopback (`127.0.0.1`), and the API server defaults to loopback binding. In production profiles (`LEDGERGUARD_ENV=production`), fault injection endpoints return `403 Forbidden`.
+- **Decentralized Storage:** Cross-database atomicity is achieved through durable application-level coordinator decisions and forward recovery. Global distributed transactions (XA) are deliberately avoided to maintain participant autonomy.
+
+---
+
+## Environment Configuration
+
+The application is configured via environment variables. Copy `.env.example` to `.env` for local configuration:
+
+| Variable | Description | Safe Local Default |
+| :--- | :--- | :--- |
+| `LEDGERGUARD_ENV` | Application environment profile (`local`, `test`, `production`) | `local` |
+| `FAULT_INJECTION_ENABLED` | Enables fault-injection endpoints for recovery testing | `false` |
+| `COORDINATOR_DB_URL` | Application connection string for Coordinator DB | `postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5442/coordinator_db` |
+| `COORDINATOR_ADMIN_DB_URL` | Migration runner connection string for Coordinator DB | `postgresql://ledgerguard_admin:ledgerguard_admin_secret@localhost:5442/coordinator_db` |
+| `LEDGER1_DB_URL` | Application connection string for Participant Ledger 1 | `postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5443/ledger1_db` |
+| `LEDGER1_ADMIN_DB_URL` | Migration runner connection string for Participant Ledger 1 | `postgresql://ledgerguard_admin:ledgerguard_admin_secret@localhost:5443/ledger1_db` |
+| `LEDGER2_DB_URL` | Application connection string for Participant Ledger 2 | `postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5444/ledger2_db` |
+| `LEDGER2_ADMIN_DB_URL` | Migration runner connection string for Participant Ledger 2 | `postgresql://ledgerguard_admin:ledgerguard_admin_secret@localhost:5444/ledger2_db` |
+| `COORDINATOR_PORT` | HTTP port for the FastAPI coordinator service | `8010` |
+| `CONSOLE_PORT` | HTTP port for the Next.js operator console | `3300` |
+| `WORKER_POLL_INTERVAL_MS` | Polling interval for transactional outbox background worker | `200` |
+| `WORKER_BATCH_SIZE` | Maximum batch size for `SKIP LOCKED` event claiming | `20` |
+
+---
+
+## Documentation & Decision Records
+
+Detailed specifications and architectural rationale are tracked in [`docs/`](docs/):
 
 - [ADR 0001: Immutable Double-Entry Journals & Role Segregation](docs/adr/0001-immutable-journals-and-role-separation.md)
 - [ADR 0002: Two-Phase Commit & Forward Recovery Invariant](docs/adr/0002-two-phase-commit-and-forward-recovery.md)
 - [ADR 0003: Durable Tombstone Semantics & Unresolved Obligations](docs/adr/0003-tombstone-semantics-and-unresolved-obligations.md)
 - [ADR 0004: Multi-Database Reachability Probing & Clearing Reconciliation](docs/adr/0004-cross-ledger-clearing-reconciliation.md)
 - [System Architecture Specification](docs/architecture/system_architecture.md)
-- [2PC Protocol Specification & State Machines](docs/architecture/protocol_2pc.md)
-- [Data Models & Database Schemas](docs/architecture/data_models.md)
+- [Transfer Protocol & State Machines](docs/architecture/protocol_2pc.md)
+- [Data Models & Schemas](docs/architecture/data_models.md)
 - [Benchmark Baseline Report](docs/benchmarks/baseline_report.md)
-- [Demonstration & Presentation Walkthrough Script](docs/DEMO_SCRIPT.md)
+- [Demonstration & Walkthrough Script](docs/DEMO_SCRIPT.md)
 
 ---
 
-## 8. Honest Limitations & Disclosures
+## License
 
-1. **Simulated Money Only:** LedgerGuard is a portfolio implementation demonstrating distributed systems and accounting primitives; it does not connect to live banking networks (UPI, IMPS, NEFT, SWIFT) or provide regulatory compliance.
-2. **Single-Currency Baseline:** The current kernel baseline operates exclusively in Indian Rupee (`INR`) integer paise. Cross-currency foreign exchange requires an exchange-clearing leg.
-3. **Host Port Mapping:** Host PostgreSQL ports are mapped to `5442` (coordinator), `5443` (ledger1), and `5444` (ledger2) to avoid port collisions with default PostgreSQL installations.
-4. **No Global ACID Across Databases:** Each participant transaction commits locally in PostgreSQL. Cross-database atomicity is achieved at the application level via durable coordinator decisions and forward recovery; global serializable isolation across independent databases is not provided.
-5. **Coordinator Outage Impact:** If the coordinator crashes or becomes unavailable during Phase 2, source funds remain reserved in an `ACTIVE` hold until the recovery orchestrator resumes execution.
-6. **Local Single-Worker Benchmarks:** Benchmark results reflect single-worker sequential throughput on documented local hardware; multi-region production HA requires distributed consensus (e.g. Raft) and dedicated network infrastructure.
+This project is licensed under the terms of the [MIT License](LICENSE).
+
+Copyright &copy; 2026 Prateek Raushan.
 
 ---
 
-## 9. Portfolio Resume Bullets
-
-- **Distributed Systems & Financial Ledgers:** "Architected and verified a multi-database financial ledger across 3 isolated PostgreSQL 17 instances, implementing double-entry accounting with PL/pgSQL row locks (`account_id ASC`), database mutation triggers, and TCC-style reserve/confirm/cancel coordination with 100% crash recovery and zero duplicate financial effects across 54 automated tests."
-- **Data Engineering & Reliability:** "Engineered an idempotent transfer coordinator and continuous cross-database reconciliation engine that audits inter-ledger clearing ($\sum \text{clearing} = 0$) and active holds, achieving sub-millisecond indexed balance queries ($O(1)$) and 32–38 TPS sequential end-to-end settlement throughput on PostgreSQL 17."
+<div align="center">
+  <sub>Maintained by <a href="https://github.com/simply-mihir">simply-mihir</a> &bull; Distributed Systems Portfolio Reference</sub>
+</div>
