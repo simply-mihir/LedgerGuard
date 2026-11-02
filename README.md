@@ -77,27 +77,47 @@ The core architecture coordinates balance movements across three isolated Postgr
 
 ## System Architecture
 
-The following diagram illustrates the deployment topology, runtime components, and storage boundaries across isolated PostgreSQL 17 instances:
+The following diagram illustrates the request and transfer path across runtime services and database boundaries:
 
 ```mermaid
-flowchart TB
+flowchart LR
     UI["Operator Console"] --> API["FastAPI API"]
     API --> TC["TCC Coordinator"]
 
-    TC -->|Decisions| CDB[("Coordinator DB")]
-    TC -->|Reserve / Confirm| L1[("Ledger 1")]
-    TC -->|Reserve / Confirm| L2[("Ledger 2")]
-
-    Worker["Recovery Worker"] -->|Recover| CDB
-    Worker -->|Recover| L1
-    Worker -->|Recover| L2
-
-    Audit["Reconciliation Engine"] -->|Audit| CDB
-    Audit -->|Audit| L1
-    Audit -->|Audit| L2
+    TC --> CDB[("Coordinator DB")]
+    TC --> L1[("Ledger 1")]
+    TC --> L2[("Ledger 2")]
 ```
 
-*All three storage instances run as isolated PostgreSQL 17 containers bound to loopback: Coordinator DB (`127.0.0.1:5442`), Ledger 1 (`127.0.0.1:5443`), and Ledger 2 (`127.0.0.1:5444`).*
+- **Coordinator DB** stores routing, idempotency, workflow state, and durable decisions.
+- **Ledger 1** and **Ledger 2** independently enforce their accounting journals, holds, and transfer obligations.
+
+### Recovery and Reconciliation
+
+```mermaid
+flowchart LR
+    Worker["Recovery Worker"]
+    Audit["Reconciliation Engine"]
+
+    CDB[("Coordinator DB")]
+    L1[("Ledger 1")]
+    L2[("Ledger 2")]
+
+    Worker --> CDB
+    Worker --> L1
+    Worker --> L2
+
+    Audit -.-> CDB
+    Audit -.-> L1
+    Audit -.-> L2
+```
+
+- Solid connections represent durable recovery work.
+- Dotted connections represent read-only reconciliation probes.
+- All three databases remain isolated PostgreSQL 17 instances bound to loopback:
+  - **Coordinator DB:** `127.0.0.1:5442`
+  - **Ledger 1:** `127.0.0.1:5443`
+  - **Ledger 2:** `127.0.0.1:5444`
 
 ### Why Independent Databases and Durable Messaging Matter
 
