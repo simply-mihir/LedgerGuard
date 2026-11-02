@@ -1,0 +1,39 @@
+# Version control
+.git/
+.gitignore
+
+# Environment & Secrets
+.env
+.env*.local
+*.pem
+*.key
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node & Next.js
+node_modules/
+.next/
+out/
+apps/console/node_modules/
+apps/console/.next/
+apps/console/out/
+
+# Database data & volumes
+pgdata*/
+docker-volumes/
+*.db
+*.sqlite3
+
+# Temporary
+tmp/
+scratch/
+artifacts/
