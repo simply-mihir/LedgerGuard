@@ -7,9 +7,12 @@
 <p><em>Built with Python 3.12, FastAPI, PostgreSQL 17, and Next.js 15.</em></p>
 
 <p>
+  <a href="https://github.com/simply-mihir/LedgerGuard/actions/workflows/ci.yml"><img src="https://github.com/simply-mihir/LedgerGuard/actions/workflows/ci.yml/badge.svg" alt="LedgerGuard CI"></a>
+</p>
+<p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python 3.12+"></a>
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.134+-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 17"></a>
   <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15.5-000000?logo=next.js&logoColor=white" alt="Next.js 15.5"></a>
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/Docker-Compose_v2-2496ED?logo=docker&logoColor=white" alt="Docker Compose"></a>
@@ -227,7 +230,7 @@ LedgerGuard includes a Next.js 15 operator console providing visibility into led
 | Layer | Component | Version | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Backend** | Python | 3.12+ | Core programming language |
-| | FastAPI | 0.115+ | High-performance asynchronous REST API framework |
+| | FastAPI | 0.134+ | High-performance asynchronous REST API framework |
 | | Psycopg 3 | 3.2+ | Native PostgreSQL driver with connection pooling (`psycopg_pool`) |
 | | Pydantic | 2.9+ | Strict type validation and domain schema enforcement |
 | **Database** | PostgreSQL | 17-alpine | Primary relational storage engine across 3 isolated instances |
