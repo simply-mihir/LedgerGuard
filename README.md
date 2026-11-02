@@ -49,6 +49,10 @@
 
 The core architecture coordinates balance movements across three isolated PostgreSQL 17 database instances: a **Coordinator** managing account routing and durable decision logs, and two independent **Participant Ledgers** maintaining localized double-entry accounting kernels. Distributed transfers use an application-level **Try-Confirm-Cancel (TCC)** workflow with durable forward recovery rather than classical distributed transaction managers (XA 2PC). Each participant operation executes and commits as an independent, locally atomic PostgreSQL transaction, preventing distributed lock stalls across network calls while ensuring that once a transfer decision is logged, the system recovers forward to settlement with zero duplicate financial effect.
 
+<p align="center">
+  <img src="docs/assets/ledgerguard-overview.png" alt="LedgerGuard operator console overview showing database health and reconciliation status" width="900">
+</p>
+
 ---
 
 ## Key Features
@@ -222,6 +226,10 @@ LedgerGuard includes a Next.js 15 operator console providing visibility into led
 | **Transfer Explorer** | Transaction audit feed displaying transfer lifecycle states and workflow event timelines. | Transfer detail modal, TCC transfer lifecycle stepper, manual reversal action. |
 | **Reconciliation Runner** | On-demand cross-database audit verifying inter-ledger clearing balances and active holds. | "Run Reconciliation" trigger, partial reachability detection, discrepancy viewer. |
 | **Experiment Console** | Interactive failure-injection testbed simulating coordinator crashes and network timeouts. | Preset fault injection scenarios, execution stepper, final invariant inspection. |
+
+<p align="center">
+  <img src="docs/assets/ledgerguard-transfer-lifecycle.png" alt="LedgerGuard distributed transfer explorer showing TCC workflow timeline and decision audit log" width="900">
+</p>
 
 ---
 
