@@ -186,7 +186,7 @@ Before beginning the demonstration or starting screen capture:
 **Spoken Narrative:**
 > "Finally, in Step 8, we trigger a stopped-and-drained cross-database reconciliation audit. It verifies double-entry balance constraints on every ledger, confirms all holds are released, and validates that total clearing sum across independent databases is exactly zero.
 >
-> That completes the demonstration: immutable journals, durable application-level coordination, crash recovery, and continuous reconciliation—running live across independent PostgreSQL 17 instances. Thank you!"
+> That completes the demonstration: immutable journals, durable application-level coordination, crash recovery, and on-demand cross-ledger reconciliation—running live across independent PostgreSQL 17 instances. Thank you!"
 
 ---
 

@@ -128,7 +128,7 @@ flowchart LR
 
 ### Why Independent Databases and Durable Messaging Matter
 
-In distributed financial architectures, individual ledgers often represent distinct legal entities, clearinghouses, or microservice failure domains. Holding database connections or distributed locks across independent networks introduces severe operational coupling: a slow query or network partition in one ledger can exhaust connection pools and freeze unrelated transfers across the cluster.
+In distributed financial architectures, individual ledgers often represent distinct legal entities, clearinghouses, or microservice failure domains. Holding distributed locks or prepared-transaction resources across independent networks introduces severe operational coupling: coordinator downtime or network latency while prepared transactions remain open retains database locks and blocks concurrent operations across the cluster.
 
 LedgerGuard eliminates distributed locking by treating each ledger as an autonomous system. Balance reservations and journal postings commit in local database transactions. Inter-ledger consistency is maintained via durable decision logging at the coordinator and transactional outbox/inbox worker recovery.
 
@@ -165,7 +165,7 @@ sequenceDiagram
 
 ### Protocol Guarantees & Distinction from Database XA 2PC
 
-- **Application-Level TCC vs. XA 2PC:** Classical database XA 2PC keeps database transactions open between Phase 1 (`PREPARE TRANSACTION`) and Phase 2 (`COMMIT PREPARED`), holding table and row locks across network round-trips. In LedgerGuard, all participant operations (`source_prepare`, `destination_prepare`, `source_confirm`, `destination_confirm`) execute as separate, locally atomic PostgreSQL transactions that commit immediately.
+- **Application-Level TCC vs. XA 2PC:** Classical database XA 2PC keeps database transactions open between Phase 1 (`PREPARE TRANSACTION`) and Phase 2 (`COMMIT PREPARED`), retaining database locks and engine-level transaction resources across network round-trips until resolved. In LedgerGuard, all participant operations (`source_prepare`, `destination_prepare`, `source_confirm`, `destination_confirm`) execute as separate, short, locally committed PostgreSQL transactions.
 - **Durable Decision Invariant:** Once the coordinator commits the `COMMIT` record to `transfer_decisions`, the outcome is immutable. Even if the coordinator crashes immediately afterward, the transfer is never rolled back or refunded to the source.
 - **Autonomous Forward Recovery:** Background workers inspect unconfirmed transfers in `COMMITTING` state and re-deliver Phase 2 confirmations until both ledgers reach settlement.
 - **Tombstone Semantics:** If a cancellation arrives at a participant before the corresponding prepare (due to network reordering), a durable `CANCELLED` tombstone is written. Any subsequent delayed prepare is rejected immediately with zero funds reserved.
@@ -178,7 +178,7 @@ Every financial operation in LedgerGuard is constrained by invariants enforced a
 
 | Invariant | Enforcement | Verified By |
 | :--- | :--- | :--- |
-| **Balanced Journal**<br>$\sum \text{lines}=0$ | Commit-time PostgreSQL trigger validates balanced lines per currency. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **Balanced Journal**<br>$\text{Debits} = \text{Credits}$ | Commit-time PostgreSQL trigger validates balanced lines (total debits equal total credits per currency). | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
 | **Journal Immutability**<br>$\Delta \text{posted records} = \varnothing$ | Database trigger blocks `UPDATE`, `DELETE`, and `TRUNCATE` operations. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
 | **Integer Minor Units**<br>$\text{amount} \in [1, 10^{11}] \subset \mathbb{Z}^+$ | Domain validation in `AmountPaise`; database checks enforce `BIGINT > 0`. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
 | **No Double-Spending**<br>$\text{available} \ge 0$ | Sorted row locks (`account_id ASC`) inside PL/pgSQL procedures. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
@@ -363,7 +363,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Current Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 54 passing tests in ~11 seconds (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 56 passing tests in ~9 seconds (`uv run pytest -ra -W error`)
 - **Linting:** 0 Ruff errors (`uv run ruff check .`)
 - **Type Checking:** 0 Mypy errors across 27 source files (`uv run mypy src`)
 - **Console Build:** Clean Next.js 15 production build (`npm run build`)
@@ -473,7 +473,7 @@ LedgerGuard/
 - **Simulated Financial Environment:** LedgerGuard is an educational reference implementation designed for portfolio and architectural evaluation. It is not connected to live payment rails (UPI, IMPS, NEFT, RTGS, or SWIFT) and does not provide regulatory compliance (e.g., PCI-DSS, SOC 2, or RBI guidelines).
 - **Single-Currency Kernel:** The core accounting kernel operates in integer Indian Rupee paise (`INR`). Multi-currency ledgers require foreign-exchange clearing legs.
 - **Local Network Isolation:** Database ports in `docker-compose.yml` bind to loopback (`127.0.0.1`), and the API server defaults to loopback binding. In production profiles (`LEDGERGUARD_ENV=production`), fault injection endpoints return `403 Forbidden`.
-- **Decentralized Storage:** Cross-database atomicity is achieved through durable application-level coordinator decisions and forward recovery. Global distributed transactions (XA) are deliberately avoided to maintain participant autonomy.
+- **Decentralized Storage:** Cross-database consistency is achieved through durable application-level coordinator decisions and autonomous forward recovery. Cross-database visibility is not globally atomic (an in-flight reservation state can exist across participants), with exact conservation invariants enforced at settlement. Classical database distributed transactions (XA) are deliberately avoided to preserve participant autonomy.
 
 ---
 

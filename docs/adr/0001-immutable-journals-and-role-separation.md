@@ -14,6 +14,6 @@ A financial ledger must guarantee the auditability and integrity of all historic
 5. **Database Role Privileges:** The application connection role (`ledgerguard_app`) is denied table-level `INSERT`, `UPDATE`, `DELETE`, and `TRUNCATE` on `journal_headers`, `journal_lines`, and `account_balances`. It possesses only `EXECUTE` privileges on `post_journal` and `update_account_status`.
 
 ## Consequences
-- **Positive:** Financial history is cryptographically append-only at the database engine level. Accidental or malicious balance modifications by application code are physically prohibited.
+- **Positive:** Financial history is strictly append-only at the database engine level. Accidental or malicious balance modifications by application code are physically prohibited.
 - **Positive:** Multi-account transfers execute without deadlocks under arbitrary concurrent thread interleaving.
 - **Negative:** Adjustments or corrections require creating explicit linked compensating journal entries rather than modifying existing rows in-place.
