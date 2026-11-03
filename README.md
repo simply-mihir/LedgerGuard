@@ -7,7 +7,7 @@
 <p><em>Built with Python 3.12, FastAPI, PostgreSQL 17, and Next.js 15.</em></p>
 
 <p>
-  <a href="https://github.com/simply-mihir/LedgerGuard/actions/workflows/ci.yml"><img src="https://github.com/simply-mihir/LedgerGuard/actions/workflows/ci.yml/badge.svg" alt="LedgerGuard CI"></a>
+  <a href="https://github.com/simply-mihir/LedgerGuard/actions/workflows/ci.yml"><img src="https://github.com/simply-mihir/LedgerGuard/actions/workflows/ci.yml/badge.svg?branch=main" alt="LedgerGuard CI"></a>
 </p>
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
@@ -61,10 +61,10 @@ The core architecture coordinates balance movements across three isolated Postgr
 
 | Capability | Implementation & Mechanism | Verified Guarantee |
 | :--- | :--- | :--- |
-| **Immutable Double-Entry** | Database triggers (`trg_prevent_journal_modification`) reject `UPDATE`, `DELETE`, and `TRUNCATE` on journals. | Posted records cannot be mutated or purged; corrections require explicit compensating entries. |
-| **Balanced Postings** | Trigger `trg_verify_journal_balanced` checks that each journal has $\ge 2$ lines and balances to exact zero per currency. | $\sum \text{amount} = 0$ enforced at transaction commit time. |
+| **Immutable Double-Entry** | Mutation and truncate triggers on `journal_headers` and `journal_lines` reject `UPDATE`, `DELETE`, and `TRUNCATE`. | Posted records cannot be mutated or purged; corrections require explicit compensating entries. |
+| **Balanced Postings** | Trigger `trg_verify_journal_balanced` checks that each journal has $\ge 2$ lines and total debits equal total credits per currency. | Total debits equal total credits enforced at transaction commit time. |
 | **Integer Minor Units** | Domain model `AmountPaise` represents currency in integer paise within $[1, 100\,000\,000\,000]$. | Eliminates floating-point rounding errors; float/boolean inputs are strictly rejected. |
-| **Concurrency Control** | Row-level locking ordered by `account_id ASC` (`SELECT ... FOR UPDATE`) in PL/pgSQL procedures. | Eliminates deadlocks between concurrent bidirectional transfers; prevents double-spending. |
+| **Concurrency Control** | Row-level locking ordered by `account_id ASC` (`SELECT ... FOR UPDATE`) in PL/pgSQL procedures. | Deterministic account ordering avoids lock-order deadlocks for multi-account postings and prevents concurrent overspending in the tested scenarios. |
 | **Idempotent APIs** | Request hashing with canonical SHA-256 fingerprints stored in `idempotency_keys` table. | Identical requests return cached responses; modified payloads return `409 Conflict`. |
 | **TCC Transfer Coordination** | Reserve/confirm/cancel workflow: Phase 1 reserves funds (hold) and registers intent; Phase 2 settles. | Decentralized coordination without distributed database locks; zero premature refunds after commit. |
 | **On-Demand Reconciliation** | Multi-database audit engine checking inter-ledger clearing conservation ($\sum \text{Clearing} = 0$). | Identifies ledger discrepancies and orphaned holds; detects partial cluster reachability. |
@@ -77,7 +77,7 @@ The core architecture coordinates balance movements across three isolated Postgr
 | **Command Inbox** | Participants deduplicate incoming commands by unique command ID before execution. | [`migrations/ledger/005_intents_holds_inbox_outbox.sql`](migrations/ledger/005_intents_holds_inbox_outbox.sql) |
 | **Cancellation Tombstones** | Out-of-order `CANCEL` writes a durable tombstone, causing late `PREPARE` messages to safely reject. | [`docs/adr/0003-tombstone-semantics-and-unresolved-obligations.md`](docs/adr/0003-tombstone-semantics-and-unresolved-obligations.md) |
 | **Unresolved Obligation Guards** | Account closure (`CLOSED`) is blocked by triggers if active holds or prepared intents exist. | [`migrations/ledger/006_closure_unresolved_obligations.sql`](migrations/ledger/006_closure_unresolved_obligations.sql) |
-| **PostgreSQL Role Separation** | Migration owner (`ledgerguard_admin`) vs application runtime (`ledgerguard_app`). | Direct table DML denied to app role; execution restricted to stored functions. |
+| **PostgreSQL Role Separation** | Migration owner (`ledgerguard_admin`) vs application runtime (`ledgerguard_app`). | Migration ownership is separated from runtime access. Direct journal and balance mutations are restricted, while posting occurs through controlled stored functions and workflow tables permit the scoped DML required by participant handlers. |
 | **Property-Based Testing** | Hypothesis stateful testing verifying that parallel transfers match an in-memory reference model. | [`tests/test_reference_model.py`](tests/test_reference_model.py) |
 
 ---
@@ -130,7 +130,7 @@ flowchart LR
 
 In distributed financial architectures, individual ledgers often represent distinct legal entities, clearinghouses, or microservice failure domains. Holding distributed locks or prepared-transaction resources across independent networks introduces severe operational coupling: coordinator downtime or network latency while prepared transactions remain open retains database locks and blocks concurrent operations across the cluster.
 
-LedgerGuard eliminates distributed locking by treating each ledger as an autonomous system. Balance reservations and journal postings commit in local database transactions. Inter-ledger consistency is maintained via durable decision logging at the coordinator and transactional outbox/inbox worker recovery.
+LedgerGuard avoids database-native distributed transaction locks. Participant operations still use short local PostgreSQL row locks for concurrency control. Balance reservations and journal postings commit in local database transactions. Inter-ledger consistency is maintained via durable decision logging at the coordinator and transactional outbox/inbox worker recovery.
 
 ---
 
@@ -166,7 +166,7 @@ sequenceDiagram
 ### Protocol Guarantees & Distinction from Database XA 2PC
 
 - **Application-Level TCC vs. XA 2PC:** Classical database XA 2PC keeps database transactions open between Phase 1 (`PREPARE TRANSACTION`) and Phase 2 (`COMMIT PREPARED`), retaining database locks and engine-level transaction resources across network round-trips until resolved. In LedgerGuard, all participant operations (`source_prepare`, `destination_prepare`, `source_confirm`, `destination_confirm`) execute as separate, short, locally committed PostgreSQL transactions.
-- **Durable Decision Invariant:** Once the coordinator commits the `COMMIT` record to `transfer_decisions`, the outcome is immutable. Even if the coordinator crashes immediately afterward, the transfer is never rolled back or refunded to the source.
+- **Durable Decision Invariant:** The coordinator serializes decision creation by locking the transfer row, returns the existing decision on idempotent re-entry, rejects conflicting decisions, and treats a durable COMMIT decision as irreversible during forward recovery. Even if the coordinator crashes immediately afterward, the transfer is never rolled back or refunded to the source.
 - **Autonomous Forward Recovery:** Background workers inspect unconfirmed transfers in `COMMITTING` state and re-deliver Phase 2 confirmations until both ledgers reach settlement.
 - **Tombstone Semantics:** If a cancellation arrives at a participant before the corresponding prepare (due to network reordering), a durable `CANCELLED` tombstone is written. Any subsequent delayed prepare is rejected immediately with zero funds reserved.
 
@@ -179,7 +179,7 @@ Every financial operation in LedgerGuard is constrained by invariants enforced a
 | Invariant | Enforcement | Verified By |
 | :--- | :--- | :--- |
 | **Balanced Journal**<br>$\text{Debits} = \text{Credits}$ | Commit-time PostgreSQL trigger validates balanced lines (total debits equal total credits per currency). | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
-| **Journal Immutability**<br>$\Delta \text{posted records} = \varnothing$ | Database trigger blocks `UPDATE`, `DELETE`, and `TRUNCATE` operations. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
+| **Journal Immutability**<br>$\Delta \text{posted records} = \varnothing$ | Mutation and truncate triggers reject `UPDATE`, `DELETE`, and `TRUNCATE` operations. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
 | **Integer Minor Units**<br>$\text{amount} \in [1, 10^{11}] \subset \mathbb{Z}^+$ | Domain validation in `AmountPaise`; database checks enforce `BIGINT > 0`. | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) |
 | **No Double-Spending**<br>$\text{available} \ge 0$ | Sorted row locks (`account_id ASC`) inside PL/pgSQL procedures. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
 | **Idempotent Replay** | Unique constraint on `(idempotency_key, scope)` with SHA-256 payload hash verification. | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) |
