@@ -6,7 +6,7 @@ Accepted
 ## Context
 When customer accounts reside across physically independent database instances, transfers cannot execute within a single ACID transaction. The system requires a distributed coordination mechanism to guarantee that funds are neither lost nor duplicated in the event of process crashes, network partitions, or transient coordinator outages.
 
-A key architectural question is whether to use PostgreSQL's database-native prepared transactions (`PREPARE TRANSACTION` / `COMMIT PREPARED` or classical XA 2PC) or an application-level coordination protocol. Classical database-native XA 2PC holds physical database connection locks and row locks indefinitely across network round-trips, creating severe lock contention, deadlock risks across independent nodes, and cascading resource exhaustion if the coordinator dies mid-flight.
+A key architectural question is whether to use PostgreSQL's database-native prepared transactions (`PREPARE TRANSACTION` / `COMMIT PREPARED` or classical XA 2PC) or an application-level coordination protocol. Database-native prepared transactions can retain locks and other connection resources after prepare, and coordinator failure can extend that blocking interval across independent participants, increasing contention and recovery complexity.
 
 ## Decision
 1. **Application-Level Reserve/Confirm/Cancel Protocol (TCC-Style):**

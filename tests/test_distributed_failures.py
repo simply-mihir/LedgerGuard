@@ -1,4 +1,4 @@
-"""Distributed 2PC failure-matrix and recovery tests across independent PostgreSQL instances.
+"""Distributed TCC failure-matrix and recovery tests across independent PostgreSQL instances.
 
 Tests:
 1. End-to-end happy path cross-ledger transfer and balanced inter-ledger clearing.
@@ -11,6 +11,7 @@ Tests:
 8. Freeze after acceptance: accepted obligation completes internally; new prepare rejects.
 9. Account closure: blocked while unresolved obligations or active holds exist.
 10. Cancel before prepare: durable tombstone rejects delayed prepare.
+11. Workflow timeline distinct settlement events and zero duplicate on retry.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ def clean_accounts():
 
 @pytest.mark.integration
 def test_end_to_end_cross_ledger_transfer(clean_accounts):
-    """Happy path: Alice (L1) -> Bob (L2) 2PC completes and clearing accounts balance."""
+    """Happy path: Alice (L1) -> Bob (L2) TCC completes and clearing accounts balance."""
     alice_id, bob_id = clean_accounts
     amt = AmountPaise(25_000)
 
@@ -494,4 +495,103 @@ def test_distributed_transfer_idempotent_retry_after_settlement(clean_accounts):
             destination_account_id=bob_id,
             amount=AmountPaise(30_000),
         )
+
+
+@pytest.mark.integration
+def test_workflow_timeline_distinct_settlement_and_no_duplicate_on_retry(clean_accounts):
+    """Regression test: verify forward recovery and subsequent idempotency retries
+
+    emit distinct participant settlement events (SOURCE_CONFIRMED, DESTINATION_CONFIRMED)
+    and do not duplicate TRANSFER_SETTLED events.
+    """
+    from psycopg.rows import dict_row
+
+    alice_id, bob_id = clean_accounts
+    amt = AmountPaise(15_000)
+    transfer_id = uuid4()
+    idem_key = f"crash-timeline-{transfer_id}"
+
+    fp = FailpointManager()
+    fp.set_failpoint("FAIL_AFTER_COMMIT_BEFORE_SOURCE_CONFIRM", transfer_id)
+
+    # 1. Initiate transfer and simulate coordinator crash right after COMMIT decision
+    with pytest.raises(CrashAfterCommitError):
+        submit_coordinator_transfer(
+            COORD_DB_URL,
+            LEDGER_URLS,
+            idempotency_key=idem_key,
+            source_account_id=alice_id,
+            destination_account_id=bob_id,
+            amount=amt,
+            transfer_id=transfer_id,
+            failpoint_mgr=fp,
+        )
+
+    # 2. Inspect intermediate workflow events before recovery
+    with get_db_connection(COORD_DB_URL) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT event_type, details FROM workflow_events WHERE transfer_id = %s ORDER BY created_at ASC;",
+                (transfer_id,),
+            )
+            pre_recovery_events = cur.fetchall()
+
+    event_types_pre = [r["event_type"] for r in pre_recovery_events]
+    assert "PHASE_PREPARE_STARTED" in event_types_pre
+    assert "DECISION_COMMITTED" in event_types_pre
+    assert "TRANSFER_SETTLED" not in event_types_pre
+
+    # 3. Autonomous forward recovery settles the transfer
+    recovered = recover_pending_transfers(COORD_DB_URL, LEDGER_URLS, transfer_id=transfer_id)
+    assert any(r["transfer_id"] == str(transfer_id) and r["status"] == "SETTLED" for r in recovered)
+
+    # 4. Check workflow events after recovery: SOURCE_CONFIRMED and DESTINATION_CONFIRMED exist
+    with get_db_connection(COORD_DB_URL) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT event_type, details FROM workflow_events WHERE transfer_id = %s ORDER BY created_at ASC;",
+                (transfer_id,),
+            )
+            post_recovery_events = cur.fetchall()
+
+    event_types_post = [r["event_type"] for r in post_recovery_events]
+    assert event_types_post.count("TRANSFER_SETTLED") == 1
+    assert "SOURCE_CONFIRMED" in event_types_post
+    assert "DESTINATION_CONFIRMED" in event_types_post
+
+    # Verify participant metadata in settlement events
+    sc_ev = next(r for r in post_recovery_events if r["event_type"] == "SOURCE_CONFIRMED")
+    dc_ev = next(r for r in post_recovery_events if r["event_type"] == "DESTINATION_CONFIRMED")
+    assert sc_ev["details"]["role"] == "source"
+    assert sc_ev["details"]["ledger_id"] == "ledger-1"
+    assert dc_ev["details"]["role"] == "destination"
+    assert dc_ev["details"]["ledger_id"] == "ledger-2"
+
+    # 5. Client retries transfer submission with original idempotency key
+    retry_res = submit_coordinator_transfer(
+        COORD_DB_URL,
+        LEDGER_URLS,
+        idempotency_key=idem_key,
+        source_account_id=alice_id,
+        destination_account_id=bob_id,
+        amount=amt,
+        transfer_id=transfer_id,
+    )
+    assert retry_res["status"] == "SETTLED"
+
+    # 6. Verify zero duplicate TRANSFER_SETTLED events after client retry
+    with get_db_connection(COORD_DB_URL) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT event_type FROM workflow_events WHERE transfer_id = %s ORDER BY created_at ASC;",
+                (transfer_id,),
+            )
+            post_retry_events = cur.fetchall()
+
+    retry_types = [r["event_type"] for r in post_retry_events]
+    assert retry_types.count("TRANSFER_SETTLED") == 1, (
+        f"Expected exactly 1 TRANSFER_SETTLED event, got {retry_types.count('TRANSFER_SETTLED')}: {retry_types}"
+    )
+    assert retry_types.count("SOURCE_CONFIRMED") == 1
+    assert retry_types.count("DESTINATION_CONFIRMED") == 1
 

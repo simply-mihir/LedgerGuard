@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LedgerGuard — Signature Scenario: Interrupted 2PC Recovery Demo.
+"""LedgerGuard — Signature Scenario: Interrupted TCC Recovery Demo.
 
 Demonstrates:
 1. Phase 1 Prepare: Alice reserves funds (hold created on Ledger 1).
@@ -82,7 +82,7 @@ def run_demo() -> int:
         "ledger-2": l2_db,
     }
 
-    print_banner("LEDGERGUARD SIGNATURE FAILURE SCENARIO: INTERRUPTED 2PC RECOVERY")
+    print_banner("LEDGERGUARD SIGNATURE FAILURE SCENARIO: INTERRUPTED TCC RECOVERY")
 
     # Step 1: Provisioning & Funding
     print_step(1, "Provisioning Isolated Participants & Seeding Accounts")
@@ -117,7 +117,7 @@ def run_demo() -> int:
     transfer_id = uuid4()
     idempotency_key = f"demo-tx-{transfer_id}"
 
-    print_step(2, f"Executing 2PC Cross-Ledger Transfer ({format_inr(transfer_amt.paise)}) with Failpoint")
+    print_step(2, f"Executing TCC Cross-Ledger Transfer ({format_inr(transfer_amt.paise)}) with Failpoint")
     print(f"  • Injected Fault: {RED}{BOLD}FAIL_AFTER_COMMIT_BEFORE_SOURCE_CONFIRM{RESET}")
     print("    Simulates a fatal coordinator crash immediately after the COMMIT decision is durably logged,")
     print("    before any Phase 2 confirmations reach participant ledgers.")

@@ -8,7 +8,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 echo "========================================================================"
-echo " Starting LedgerGuard Signature Scenario Demo: Interrupted 2PC Recovery "
+echo " Starting LedgerGuard Signature Scenario Demo: Interrupted TCC Recovery "
 echo "========================================================================"
 
 # Check for uv binary

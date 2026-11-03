@@ -1,4 +1,4 @@
-"""Distributed transfer coordinator handling idempotency, directory lookup, and 2PC initiation."""
+"""Distributed transfer coordinator handling idempotency, directory lookup, and TCC initiation."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def submit_coordinator_transfer(
     transfer_id: UUID | None = None,
     failpoint_mgr: FailpointManager | None = None,
 ) -> dict[str, Any]:
-    """Submit a transfer to the coordinator with idempotency and distributed 2PC orchestration."""
+    """Submit a transfer to the coordinator with idempotency and distributed TCC orchestration."""
     payload_dict = {
         "source_account_id": str(source_account_id),
         "destination_account_id": str(destination_account_id),
@@ -94,7 +94,7 @@ def submit_coordinator_transfer(
             )
         conn.commit()
 
-    # 4. Execute 2PC orchestration
+    # 4. Execute TCC orchestration
     result = execute_two_phase_commit(
         coord_db_url,
         t_id,

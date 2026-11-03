@@ -1,4 +1,4 @@
-"""Deterministic failpoints for simulating network, crash, and transport failures across 2PC."""
+"""Deterministic failpoints for simulating network, crash, and transport failures across TCC transfers."""
 
 from __future__ import annotations
 

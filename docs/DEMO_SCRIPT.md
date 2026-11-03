@@ -34,7 +34,7 @@ Before beginning the demonstration or starting screen capture:
 **Spoken Narrative:**
 > "Hello! Today I'm demonstrating LedgerGuard, a distributed double-entry financial ledger built for wallet and inter-ledger settlement. 
 > 
-> Unlike typical distributed transaction demos that rely on shared database schemas or 2PC locks held across the network, LedgerGuard coordinates transfers across three completely independent PostgreSQL 17 failure domains: a central Coordinator and two autonomous Participant Ledgers, Ledger 1 and Ledger 2.
+> Unlike typical distributed transaction demos that rely on shared database schemas or classical database XA 2PC locks held across the network, LedgerGuard coordinates transfers across three completely independent PostgreSQL 17 failure domains: a central Coordinator and two autonomous Participant Ledgers, Ledger 1 and Ledger 2.
 >
 > In financial systems, the cardinal rule after a transaction reaches a durable COMMIT decision is that you must always recover forward. You can never automatically refund or rollback just because a network timeout occurs after money was committed. Let's see this in action."
 
@@ -54,7 +54,7 @@ Before beginning the demonstration or starting screen capture:
 **Expected Visible Output:**
 ```text
 ===========================================================================
-  LEDGERGUARD SIGNATURE FAILURE SCENARIO: INTERRUPTED 2PC RECOVERY
+  LEDGERGUARD SIGNATURE FAILURE SCENARIO: INTERRUPTED TCC RECOVERY
 ===========================================================================
 
 [STEP 1] Provisioning Isolated Participants & Seeding Accounts
@@ -66,7 +66,7 @@ Before beginning the demonstration or starting screen capture:
     - Posted Balance:     ₹0.00
     - Available Balance:  ₹0.00
 
-[STEP 2] Executing 2PC Cross-Ledger Transfer (₹400.00) with Failpoint
+[STEP 2] Executing TCC Cross-Ledger Transfer (₹400.00) with Failpoint
   • Injected Fault: FAIL_AFTER_COMMIT_BEFORE_SOURCE_CONFIRM
   ⚡ CRASH INJECTED: Simulated coordinator crash immediately after durable COMMIT.
 ```

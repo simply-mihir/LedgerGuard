@@ -2,7 +2,7 @@
 
 # LedgerGuard
 
-<p><strong>A multi-database financial ledger and operator console demonstrating immutable double-entry bookkeeping, TCC-style reserve/confirm/cancel transfer coordination, and continuous cross-ledger reconciliation.</strong></p>
+<p><strong>A multi-database financial ledger and operator console demonstrating immutable double-entry bookkeeping, TCC-style reserve/confirm/cancel transfer coordination, and on-demand cross-ledger reconciliation.</strong></p>
 
 <p><em>Built with Python 3.12, FastAPI, PostgreSQL 17, and Next.js 15.</em></p>
 
@@ -66,8 +66,8 @@ The core architecture coordinates balance movements across three isolated Postgr
 | **Integer Minor Units** | Domain model `AmountPaise` represents currency in integer paise within $[1, 100\,000\,000\,000]$. | Eliminates floating-point rounding errors; float/boolean inputs are strictly rejected. |
 | **Concurrency Control** | Row-level locking ordered by `account_id ASC` (`SELECT ... FOR UPDATE`) in PL/pgSQL procedures. | Eliminates deadlocks between concurrent bidirectional transfers; prevents double-spending. |
 | **Idempotent APIs** | Request hashing with canonical SHA-256 fingerprints stored in `idempotency_keys` table. | Identical requests return cached responses; modified payloads return `409 Conflict`. |
-| **TCC Transfer Coordination** | Two-phase workflow: Phase 1 reserves funds (hold) and registers intent; Phase 2 settles. | Decentralized coordination without distributed database locks; zero premature refunds after commit. |
-| **Continuous Reconciliation** | Multi-database audit engine checking inter-ledger clearing conservation ($\sum \text{Clearing} = 0$). | Identifies ledger discrepancies and orphaned holds; detects partial cluster reachability. |
+| **TCC Transfer Coordination** | Reserve/confirm/cancel workflow: Phase 1 reserves funds (hold) and registers intent; Phase 2 settles. | Decentralized coordination without distributed database locks; zero premature refunds after commit. |
+| **On-Demand Reconciliation** | Multi-database audit engine checking inter-ledger clearing conservation ($\sum \text{Clearing} = 0$). | Identifies ledger discrepancies and orphaned holds; detects partial cluster reachability. |
 
 ### Engineering Depth
 
@@ -88,7 +88,7 @@ The following diagram illustrates the request and transfer path across runtime s
 
 ```mermaid
 flowchart LR
-    UI["Operator Console"] --> API["FastAPI API"]
+    UI["Operator Console"] --> API["FastAPI Operator API"]
     API --> TC["TCC Coordinator"]
 
     TC --> CDB[("Coordinator DB")]
@@ -221,7 +221,7 @@ LedgerGuard includes a Next.js 15 operator console providing visibility into led
 
 | Screen | Primary Functionality | Operator Controls |
 | :--- | :--- | :--- |
-| **Overview** | System topology, database reachability indicators, aggregate assets, liabilities, and clearing sum. | Auto-refresh toggle, manual refresh, cluster status cards. |
+| **Overview** | System topology, database reachability indicators, aggregate assets, liabilities, and clearing sum. | Auto-refreshed every 10 seconds, manual refresh, cluster status cards. |
 | **Accounts Explorer** | Multi-ledger directory of customer wallets with posted, held, and available balances. | Account status filters, double-entry statement ledger modal. |
 | **Transfer Explorer** | Transaction audit feed displaying transfer lifecycle states and workflow event timelines. | Transfer detail modal, TCC transfer lifecycle stepper, manual reversal action. |
 | **Reconciliation Runner** | On-demand cross-database audit verifying inter-ledger clearing balances and active holds. | "Run Reconciliation" trigger, partial reachability detection, discrepancy viewer. |
@@ -238,14 +238,14 @@ LedgerGuard includes a Next.js 15 operator console providing visibility into led
 | Layer | Component | Version | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Backend** | Python | 3.12+ | Core programming language |
-| | FastAPI | 0.134+ | High-performance asynchronous REST API framework |
+| | FastAPI | 0.134+ | High-performance REST API framework for operator API |
 | | Psycopg 3 | 3.2+ | Native PostgreSQL driver with connection pooling (`psycopg_pool`) |
 | | Pydantic | 2.9+ | Strict type validation and domain schema enforcement |
 | **Database** | PostgreSQL | 17-alpine | Primary relational storage engine across 3 isolated instances |
 | | PL/pgSQL | 17 | Atomic stored procedures, mutation triggers, and row-level locks |
 | **Workflow & Reliability** | Transactional Outbox | Custom | Reliable asynchronous event publication via `SKIP LOCKED` |
 | | Command Inbox | Custom | At-least-once command deduplication on participant ledgers |
-| | TCC Coordinator | Custom | Two-phase reserve/confirm/cancel coordinator with forward recovery |
+| | TCC Coordinator | Custom | Reserve/confirm/cancel coordinator with forward recovery |
 | **Testing & Quality** | Pytest | 8.3+ | Automated test runner with async fixture support |
 | | Hypothesis | 6.115+ | Property-based testing against an in-memory reference model |
 | | Ruff | 0.7+ | Fast Python linter and code formatter |
@@ -503,11 +503,11 @@ The application is configured via environment variables. Copy `.env.example` to 
 Detailed specifications and architectural rationale are tracked in [`docs/`](docs/):
 
 - [ADR 0001: Immutable Double-Entry Journals & Role Segregation](docs/adr/0001-immutable-journals-and-role-separation.md)
-- [ADR 0002: TCC Coordination & Forward Recovery Invariant](docs/adr/0002-two-phase-commit-and-forward-recovery.md)
+- [ADR 0002: TCC Coordination & Forward Recovery Invariant](docs/adr/0002-tcc-and-forward-recovery.md)
 - [ADR 0003: Durable Tombstone Semantics & Unresolved Obligations](docs/adr/0003-tombstone-semantics-and-unresolved-obligations.md)
 - [ADR 0004: Multi-Database Reachability Probing & Clearing Reconciliation](docs/adr/0004-cross-ledger-clearing-reconciliation.md)
 - [System Architecture Specification](docs/architecture/system_architecture.md)
-- [TCC Transfer Protocol & State Machines](docs/architecture/protocol_2pc.md)
+- [TCC Transfer Protocol & State Machines](docs/architecture/protocol_tcc.md)
 - [Data Models & Schemas](docs/architecture/data_models.md)
 - [Benchmark Baseline Report](docs/benchmarks/baseline_report.md)
 - [Demonstration & Walkthrough Script](docs/DEMO_SCRIPT.md)

@@ -1,4 +1,4 @@
-"""Two-Phase Commit (2PC) orchestrator coordinating distributed transfers across independent ledgers."""
+"""Try-Confirm-Cancel (TCC) orchestrator coordinating distributed transfers across independent ledgers."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class OrchestrationError(Exception):
-    """Base exception for 2PC orchestration."""
+    """Base exception for TCC orchestration."""
 
 
 def record_workflow_event(
@@ -50,13 +50,43 @@ def record_workflow_event(
         )
 
 
+def record_workflow_event_once(
+    conn: Any,
+    transfer_id: UUID,
+    event_type: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Append an event to coordinator workflow_events audit table if not already recorded."""
+    from psycopg.types.json import Jsonb
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1 FROM workflow_events
+            WHERE transfer_id = %s AND event_type = %s
+            LIMIT 1;
+        """,
+            (transfer_id, event_type),
+        )
+        if cur.fetchone():
+            return
+
+        cur.execute(
+            """
+            INSERT INTO workflow_events (transfer_id, event_type, details, created_at)
+            VALUES (%s, %s, %s, NOW());
+        """,
+            (transfer_id, event_type, Jsonb(details or {})),
+        )
+
+
 def execute_two_phase_commit(
     coord_db_url: str,
     transfer_id: UUID,
     ledger_db_urls: dict[str, str],
     failpoint_mgr: FailpointManager | None = None,
 ) -> dict[str, Any]:
-    """Execute or resume two-phase commit orchestration for a distributed transfer.
+    """Execute or resume TCC orchestration for a distributed transfer.
 
     Guarantees:
     - Prepare phase reserves funds on source and checks destination viability.
@@ -93,6 +123,10 @@ def execute_two_phase_commit(
             )
             dec_row = cur.fetchone()
 
+    # Early return if transfer already reached a terminal state
+    if t["state"] in ("SETTLED", "CANCELLED"):
+        return {"transfer_id": str(transfer_id), "status": t["state"]}
+
     source_ledger_url = ledger_db_urls[t["source_ledger_id"]]
     dest_ledger_url = ledger_db_urls[t["destination_ledger_id"]]
     amount = int(t["amount_minor"])
@@ -115,6 +149,14 @@ def execute_two_phase_commit(
                 command_id=f"sc-{transfer_id}",
                 transfer_id=transfer_id,
             )
+            with get_db_connection(coord_db_url) as conn:
+                record_workflow_event_once(
+                    conn,
+                    transfer_id,
+                    "SOURCE_CONFIRMED",
+                    {"ledger_id": t["source_ledger_id"], "role": "source", "step": "source_settlement"},
+                )
+                conn.commit()
 
             # Step A.2: Check failpoint between source confirm and dest confirm
             fp.check("FAIL_AFTER_SOURCE_CONFIRM_BEFORE_DEST_CONFIRM", transfer_id)
@@ -125,6 +167,14 @@ def execute_two_phase_commit(
                 command_id=f"dc-{transfer_id}",
                 transfer_id=transfer_id,
             )
+            with get_db_connection(coord_db_url) as conn:
+                record_workflow_event_once(
+                    conn,
+                    transfer_id,
+                    "DESTINATION_CONFIRMED",
+                    {"ledger_id": t["destination_ledger_id"], "role": "destination", "step": "destination_settlement"},
+                )
+                conn.commit()
 
             # Step A.4: Check failpoint after dest confirm reply
             fp.check("FAIL_AFTER_DEST_CONFIRM_REPLY", transfer_id)
@@ -140,7 +190,7 @@ def execute_two_phase_commit(
                     """,
                         (transfer_id,),
                     )
-                record_workflow_event(conn, transfer_id, "TRANSFER_SETTLED")
+                record_workflow_event_once(conn, transfer_id, "TRANSFER_SETTLED", {"status": "SETTLED"})
                 conn.commit()
 
             return {"transfer_id": str(transfer_id), "status": "SETTLED"}
@@ -153,12 +203,29 @@ def execute_two_phase_commit(
                 transfer_id=transfer_id,
                 reason="Recovery of cancelled transfer",
             )
+            with get_db_connection(coord_db_url) as conn:
+                record_workflow_event_once(
+                    conn,
+                    transfer_id,
+                    "SOURCE_CANCELLED",
+                    {"ledger_id": t["source_ledger_id"], "role": "source", "step": "source_cancel"},
+                )
+                conn.commit()
+
             handle_participant_cancel(
                 dest_ledger_url,
                 command_id=f"dc-cancel-{transfer_id}",
                 transfer_id=transfer_id,
                 reason="Recovery of cancelled transfer",
             )
+            with get_db_connection(coord_db_url) as conn:
+                record_workflow_event_once(
+                    conn,
+                    transfer_id,
+                    "DESTINATION_CANCELLED",
+                    {"ledger_id": t["destination_ledger_id"], "role": "destination", "step": "destination_cancel"},
+                )
+                conn.commit()
 
             with get_db_connection(coord_db_url) as conn:
                 with conn.cursor() as cur:
@@ -170,17 +237,14 @@ def execute_two_phase_commit(
                     """,
                         (transfer_id,),
                     )
-                record_workflow_event(conn, transfer_id, "TRANSFER_CANCELLED")
+                record_workflow_event_once(conn, transfer_id, "TRANSFER_CANCELLED", {"status": "CANCELLED"})
                 conn.commit()
 
             return {"transfer_id": str(transfer_id), "status": "CANCELLED"}
 
     # -----------------------------------------------------------------------
-    # Case B: No decision recorded yet (Execute 2PC from start)
+    # Case B: No decision recorded yet (Execute TCC from start)
     # -----------------------------------------------------------------------
-    if t["state"] in ("SETTLED", "CANCELLED"):
-        return {"transfer_id": str(transfer_id), "status": t["state"]}
-
     # Update state to PREPARING
     with get_db_connection(coord_db_url) as conn:
         with conn.cursor() as cur:
@@ -192,7 +256,7 @@ def execute_two_phase_commit(
             """,
                 (transfer_id,),
             )
-        record_workflow_event(conn, transfer_id, "PHASE_PREPARE_STARTED")
+        record_workflow_event_once(conn, transfer_id, "PHASE_PREPARE_STARTED")
         conn.commit()
 
     # Step 1: Source Prepare (reserve funds and create active hold)
@@ -222,7 +286,9 @@ def execute_two_phase_commit(
                 """,
                     (transfer_id,),
                 )
-            record_workflow_event(conn, transfer_id, "SOURCE_PREPARE_REJECTED", {"reason": reason})
+            record_workflow_event_once(
+                conn, transfer_id, "SOURCE_PREPARE_REJECTED", {"reason": reason}
+            )
             conn.commit()
         return {"transfer_id": str(transfer_id), "status": "CANCELLED", "reason": reason}
 
@@ -260,7 +326,7 @@ def execute_two_phase_commit(
                 """,
                     (transfer_id,),
                 )
-            record_workflow_event(
+            record_workflow_event_once(
                 conn, transfer_id, "DESTINATION_PREPARE_REJECTED", {"reason": reason}
             )
             conn.commit()
@@ -284,7 +350,7 @@ def execute_two_phase_commit(
             """,
                 (transfer_id,),
             )
-        record_workflow_event(conn, transfer_id, "DECISION_COMMITTED")
+        record_workflow_event_once(conn, transfer_id, "DECISION_COMMITTED")
         conn.commit()
 
     # Check failpoint: crash immediately after COMMIT recorded
@@ -298,6 +364,14 @@ def execute_two_phase_commit(
         command_id=f"sc-{transfer_id}",
         transfer_id=transfer_id,
     )
+    with get_db_connection(coord_db_url) as conn:
+        record_workflow_event_once(
+            conn,
+            transfer_id,
+            "SOURCE_CONFIRMED",
+            {"ledger_id": t["source_ledger_id"], "role": "source", "step": "source_settlement"},
+        )
+        conn.commit()
 
     # Check failpoint: crash after source settlement before destination settlement
     fp.check("FAIL_AFTER_SOURCE_CONFIRM_BEFORE_DEST_CONFIRM", transfer_id)
@@ -310,6 +384,14 @@ def execute_two_phase_commit(
         command_id=f"dc-{transfer_id}",
         transfer_id=transfer_id,
     )
+    with get_db_connection(coord_db_url) as conn:
+        record_workflow_event_once(
+            conn,
+            transfer_id,
+            "DESTINATION_CONFIRMED",
+            {"ledger_id": t["destination_ledger_id"], "role": "destination", "step": "destination_settlement"},
+        )
+        conn.commit()
 
     # Check failpoint: lost reply after destination confirm committed
     fp.check("FAIL_AFTER_DEST_CONFIRM_REPLY", transfer_id)
@@ -325,7 +407,7 @@ def execute_two_phase_commit(
             """,
                 (transfer_id,),
             )
-        record_workflow_event(conn, transfer_id, "TRANSFER_SETTLED")
+        record_workflow_event_once(conn, transfer_id, "TRANSFER_SETTLED", {"status": "SETTLED"})
         conn.commit()
 
     return {"transfer_id": str(transfer_id), "status": "SETTLED"}

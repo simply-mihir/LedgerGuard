@@ -211,7 +211,7 @@ def run_benchmark_suite(num_transfers: int = 60) -> dict[str, Any]:
             total_duration_ms = (t1 - t0) * 1000.0
 
             # Estimate acceptance latency (coordinator initial transaction ~30% of total)
-            # and settlement latency (two-phase commit ~70% of total)
+            # and settlement latency (TCC ~70% of total)
             acc_ms = total_duration_ms * 0.28
             settle_ms = total_duration_ms * 0.72
 
@@ -379,7 +379,7 @@ Key characteristics and measurement boundaries of this baseline suite include:
 2. **Absence of Concurrent Row-Lock Contention:** Because the benchmark driver executes transfers sequentially from a single client thread, transactions never compete concurrently for the row-level lock on `account_balances`. In a concurrent workload with multiple parallel workers, updates to the hot account would serialize on row locks, resulting in elevated wait times and reduced throughput.
 3. **Measurement Scope & Inferred Breakdown:**
    - **Operations:** Measures {data["transfers_per_run"]} attempted and 100% successful settled transfers per configuration.
-   - **Latency:** Measures end-to-end wall-clock latency per transfer. Acceptance and settlement stage breakdown is an inferred proportional attribution (~28% coordinator acceptance, ~72% two-phase participant execution), not two decoupled network timestamps.
+   - **Latency:** Measures end-to-end wall-clock latency per transfer. Acceptance and settlement stage breakdown is an inferred proportional attribution (~28% coordinator acceptance, ~72% TCC participant execution), not two decoupled network timestamps.
    - **Contention & Retries:** Rejection and retry counts were zero due to adequate account pre-funding and single-threaded execution.
    - **Queue-Drain Time:** Transfers were coordinated synchronously end-to-end; asynchronous background outbox worker queue-drain time was not measured.
 
@@ -387,14 +387,14 @@ Key characteristics and measurement boundaries of this baseline suite include:
 
 ## 2. Latency Breakdown: Inferred Acceptance vs. Settlement Stages
 
-LedgerGuard decouples **Acceptance Latency** (recording the transfer intent, canonical SHA-256 fingerprint, and idempotency guarantee in the coordinator DB) from **Settlement Latency** (the Two-Phase Commit round-trips across source and destination participants):
+LedgerGuard decouples **Acceptance Latency** (recording the transfer intent, canonical SHA-256 fingerprint, and idempotency guarantee in the coordinator DB) from **Settlement Latency** (the TCC round-trips across source and destination participants):
 
 ### Uniform Workload Breakdown ({data["transfers_per_run"]} Settled Transfers)
 
 | Stage | Mean (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Acceptance** | {u["acc_stats"]["mean"]:.2f} ms | {u["acc_stats"]["p50"]:.2f} ms | {u["acc_stats"]["p95"]:.2f} ms | {u["acc_stats"]["p99"]:.2f} ms | API validation, payload fingerprint, intent insertion |
-| **Settlement (2PC)** | {u["set_stats"]["mean"]:.2f} ms | {u["set_stats"]["p50"]:.2f} ms | {u["set_stats"]["p95"]:.2f} ms | {u["set_stats"]["p99"]:.2f} ms | Phase 1 Prepares + Decision Log + Phase 2 Confirms |
+| **Settlement (TCC)** | {u["set_stats"]["mean"]:.2f} ms | {u["set_stats"]["p50"]:.2f} ms | {u["set_stats"]["p95"]:.2f} ms | {u["set_stats"]["p99"]:.2f} ms | Phase 1 Prepares + Decision Log + Phase 2 Confirms |
 | **End-to-End Total** | **{u["total_stats"]["mean"]:.2f} ms** | **{u["total_stats"]["p50"]:.2f} ms** | **{u["total_stats"]["p95"]:.2f} ms** | **{u["total_stats"]["p99"]:.2f} ms** | Synchronous completion |
 
 ### Hot-Account Workload Breakdown (80% Concentration)
@@ -402,7 +402,7 @@ LedgerGuard decouples **Acceptance Latency** (recording the transfer intent, can
 | Stage | Mean (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Acceptance** | {h["acc_stats"]["mean"]:.2f} ms | {h["acc_stats"]["p50"]:.2f} ms | {h["acc_stats"]["p95"]:.2f} ms | {h["acc_stats"]["p99"]:.2f} ms | Intent registered without locking recipient |
-| **Settlement (2PC)** | {h["set_stats"]["mean"]:.2f} ms | {h["set_stats"]["p50"]:.2f} ms | {h["set_stats"]["p95"]:.2f} ms | {h["set_stats"]["p99"]:.2f} ms | Serialized row-level locks on hot account balances |
+| **Settlement (TCC)** | {h["set_stats"]["mean"]:.2f} ms | {h["set_stats"]["p50"]:.2f} ms | {h["set_stats"]["p95"]:.2f} ms | {h["set_stats"]["p99"]:.2f} ms | Serialized row-level locks on hot account balances |
 | **End-to-End Total** | **{h["total_stats"]["mean"]:.2f} ms** | **{h["total_stats"]["p50"]:.2f} ms** | **{h["total_stats"]["p95"]:.2f} ms** | **{h["total_stats"]["p99"]:.2f} ms** | Queueing observed under contention |
 
 ---
@@ -473,7 +473,7 @@ In cross-ledger settlement, every outgoing transfer debits `SYSTEM_CLEARING_ACCO
    - Under naive implementation, updating the clearing account row in `account_balances` on every transfer creates a global lock bottleneck across all concurrent transfers.
 2. **LedgerGuard Mitigation Discipline:**
    - Single-statement row locks are acquired in sorted order (`account_id ASC`) inside the `post_journal` stored procedure.
-   - Network calls and 2PC coordination happen **strictly outside** the locked PostgreSQL transaction.
+   - Network calls and TCC coordination happen **strictly outside** the locked PostgreSQL transaction.
    - For higher volume tiers, batch clearing settlement (accumulating outbox clearing lines and posting aggregated multi-transfer journals) can be enabled without changing domain invariants.
 
 ---

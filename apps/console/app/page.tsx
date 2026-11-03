@@ -298,7 +298,7 @@ export default function OperatorConsole() {
               LedgerGuard
             </h1>
             <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              Dual-Ledger 2PC Financial Engine
+              Dual-Ledger TCC Financial Engine
             </p>
           </div>
         </div>
@@ -443,7 +443,7 @@ export default function OperatorConsole() {
               </div>
 
               <div className="glass-panel metric-card">
-                <span className="metric-label">Pending In-Flight 2PC</span>
+                <span className="metric-label">Pending TCC Transfers</span>
                 <span className="metric-value" style={{ color: overview?.pending_transfers ? 'var(--accent-amber)' : 'var(--text-primary)' }}>
                   {overview?.pending_transfers || 0}
                 </span>
@@ -758,7 +758,7 @@ export default function OperatorConsole() {
               <div className="glass-panel" style={{ padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <h3 style={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                    2PC Workflow Timeline: {selectedTransfer.transfer_id}
+                    TCC Workflow Timeline: {selectedTransfer.transfer_id}
                   </h3>
                   <button
                     className="btn btn-secondary"
@@ -787,10 +787,17 @@ export default function OperatorConsole() {
                         #{idx + 1}
                       </span>
                       <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--accent-cyan)' }}>
-                            {ev.event_type}
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--accent-cyan)' }}>
+                              {ev.event_type}
+                            </span>
+                            {Boolean(ev.details && typeof ev.details === 'object' && (ev.details as Record<string, unknown>).role) && (
+                              <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                                {String((ev.details as Record<string, unknown>).role).toUpperCase()} ({String((ev.details as Record<string, unknown>).ledger_id)})
+                              </span>
+                            )}
+                          </div>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                             {new Date(ev.created_at).toLocaleTimeString()}
                           </span>
@@ -946,7 +953,7 @@ export default function OperatorConsole() {
                     Signature Scenario: Crash After COMMIT → Forward Recovery
                   </h3>
                   <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', maxWidth: '680px', lineHeight: 1.5 }}>
-                    Alice (Ledger 1) sends ₹300.00 to Bob (Ledger 2). The coordinator initiates 2PC, reserves funds on Ledger 1, accepts the obligation on Ledger 2, and commits the decision under row lock. The coordinator process immediately crashes before dispatching confirmation. On recovery, the worker recovers forward to final settlement with zero residual holds and exact single credit.
+                    Alice (Ledger 1) sends ₹300.00 to Bob (Ledger 2). The coordinator initiates a TCC transfer, reserves funds on Ledger 1, accepts the obligation on Ledger 2, and commits the decision under row lock. The coordinator process immediately crashes before dispatching confirmation. On recovery, the worker recovers forward to final settlement with zero residual holds and exact single credit.
                   </p>
                 </div>
                 <button

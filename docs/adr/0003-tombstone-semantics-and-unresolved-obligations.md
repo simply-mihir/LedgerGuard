@@ -15,7 +15,7 @@ In distributed asynchronous messaging systems, command packets may arrive out of
    - In addition, database migration `006_closure_unresolved_obligations.sql` introduces an explicit verification trigger: closure is unconditionally rejected if the account has any `holds` with status `ACTIVE` OR any `transfer_intents` with status `PREPARED`.
 3. **Account Freezing Semantics:**
    - Freezing an account prevents new outgoing transfers and new incoming prepares.
-   - However, once an incoming or outgoing transfer has already been accepted and prepared, subsequent freezing of the account does not block internal 2PC settlement of that committed obligation.
+   - However, once an incoming or outgoing transfer has already been accepted and prepared, subsequent freezing of the account does not block internal TCC settlement of that committed obligation.
 
 ## Consequences
 - **Positive:** Network reordering can never cause funds to be permanently orphaned in hold state by a late-arriving prepare.

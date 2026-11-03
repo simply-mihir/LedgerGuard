@@ -35,7 +35,7 @@ Key characteristics and measurement boundaries of this baseline suite include:
 2. **Absence of Concurrent Row-Lock Contention:** Because the benchmark driver executes transfers sequentially from a single client thread, transactions never compete concurrently for the row-level lock on `account_balances`. In a concurrent workload with multiple parallel workers, updates to the hot account would serialize on row locks, resulting in elevated wait times and reduced throughput.
 3. **Measurement Scope & Inferred Breakdown:**
    - **Operations:** Measures 60 attempted and 100% successful settled transfers per configuration (`60/60`).
-   - **Latency:** Measures end-to-end wall-clock latency per transfer. Acceptance and settlement stage breakdown is an inferred proportional attribution (~28% coordinator acceptance, ~72% two-phase participant execution), not two decoupled network timestamps.
+   - **Latency:** Measures end-to-end wall-clock latency per transfer. Acceptance and settlement stage breakdown is an inferred proportional attribution (~28% coordinator acceptance, ~72% TCC participant execution), not two decoupled network timestamps.
    - **Contention & Retries:** Rejection and retry counts were zero due to adequate account pre-funding and single-threaded execution.
    - **Queue-Drain Time:** Transfers were coordinated synchronously end-to-end; asynchronous background outbox worker queue-drain time was not measured.
 
@@ -43,14 +43,14 @@ Key characteristics and measurement boundaries of this baseline suite include:
 
 ## 2. Latency Breakdown: Inferred Acceptance vs. Settlement Stages
 
-LedgerGuard decouples **Acceptance Latency** (recording the transfer intent, canonical SHA-256 fingerprint, and idempotency guarantee in the coordinator DB) from **Settlement Latency** (the Two-Phase Commit round-trips across source and destination participants):
+LedgerGuard decouples **Acceptance Latency** (recording the transfer intent, canonical SHA-256 fingerprint, and idempotency guarantee in the coordinator DB) from **Settlement Latency** (the TCC round-trips across source and destination participants):
 
 ### Uniform Workload Breakdown (60 Settled Transfers)
 
 | Stage | Mean (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Acceptance** | 8.72 ms | 7.43 ms | 13.26 ms | 38.53 ms | API validation, payload fingerprint, intent insertion |
-| **Settlement (2PC)** | 22.42 ms | 19.11 ms | 34.09 ms | 99.08 ms | Phase 1 Prepares + Decision Log + Phase 2 Confirms |
+| **Settlement (TCC)** | 22.42 ms | 19.11 ms | 34.09 ms | 99.08 ms | Phase 1 Prepares + Decision Log + Phase 2 Confirms |
 | **End-to-End Total** | **31.13 ms** | **26.54 ms** | **47.35 ms** | **137.61 ms** | Synchronous completion |
 
 ### Hot-Account Workload Breakdown (80% Concentration)
@@ -58,7 +58,7 @@ LedgerGuard decouples **Acceptance Latency** (recording the transfer intent, can
 | Stage | Mean (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Acceptance** | 7.32 ms | 6.91 ms | 9.94 ms | 13.26 ms | Intent registered without locking recipient |
-| **Settlement (2PC)** | 18.83 ms | 17.76 ms | 25.56 ms | 34.09 ms | Serialized row-level locks on hot account balances |
+| **Settlement (TCC)** | 18.83 ms | 17.76 ms | 25.56 ms | 34.09 ms | Serialized row-level locks on hot account balances |
 | **End-to-End Total** | **26.15 ms** | **24.67 ms** | **35.50 ms** | **47.35 ms** | Queueing observed under contention |
 
 ---
@@ -160,7 +160,7 @@ In cross-ledger settlement, every outgoing transfer debits `SYSTEM_CLEARING_ACCO
    - Under naive implementation, updating the clearing account row in `account_balances` on every transfer creates a global lock bottleneck across all concurrent transfers.
 2. **LedgerGuard Mitigation Discipline:**
    - Single-statement row locks are acquired in sorted order (`account_id ASC`) inside the `post_journal` stored procedure.
-   - Network calls and 2PC coordination happen **strictly outside** the locked PostgreSQL transaction.
+   - Network calls and TCC coordination happen **strictly outside** the locked PostgreSQL transaction.
    - For higher volume tiers, batch clearing settlement (accumulating outbox clearing lines and posting aggregated multi-transfer journals) can be enabled without changing domain invariants.
 
 ---

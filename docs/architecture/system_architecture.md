@@ -14,7 +14,7 @@ flowchart TB
     subgraph CoordinatorDomain["Coordinator Domain (Port 5442)"]
         CoordAPI["Coordinator REST API (FastAPI)"]
         DirService["Directory & Routing Service"]
-        Orchestrator["2PC Worker & Forward Recovery"]
+        Orchestrator["TCC Recovery Worker & Forward Recovery"]
         CoordDB[(Coordinator PostgreSQL 17)]
     end
 
@@ -70,9 +70,9 @@ flowchart TB
   $$\sum \text{Clearing Balances} = 0$$
 
 ### 2.5. Operator Console (`apps/console/`)
-- Next.js 15 / TypeScript interface providing 5 real-time screens:
+- Next.js 15 / TypeScript interface providing 5 operator-facing screens:
   1. **Overview:** System topology, ledgered totals, net clearing balance, active holds, 24h volume.
   2. **Accounts Explorer:** Balance cards, account status lifecycle, and full journal statement modals.
-  3. **Transfer Explorer:** Searchable transaction history with interactive 2PC lifecycle stepper.
+  3. **Transfer Explorer:** Searchable transaction history with interactive TCC lifecycle stepper.
   4. **Reconciliation Runner:** Cross-database audit execution with Stopped-and-Drained verification.
   5. **Experiment Console:** Interactive fault injector demonstrating signature failure and forward recovery.

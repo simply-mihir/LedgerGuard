@@ -256,7 +256,7 @@ def test_cancel_before_prepare_tombstone_rejects_delayed_prepare():
 
 
 # ---------------------------------------------------------------------------
-# 5. Full Two-Phase Flow: Prepare -> Source Confirm -> Dest Confirm
+# 5. Full TCC Flow: Prepare -> Source Confirm -> Dest Confirm
 # ---------------------------------------------------------------------------
 
 
