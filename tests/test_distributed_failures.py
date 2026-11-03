@@ -16,6 +16,7 @@ Tests:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID, uuid4
 
 import pytest
@@ -44,7 +45,7 @@ from ledgerguard.participant.workflow_handler import (
     handle_participant_cancel,
     handle_source_prepare,
 )
-from ledgerguard.worker.orchestrator import recover_pending_transfers
+from ledgerguard.worker.orchestrator import execute_two_phase_commit, recover_pending_transfers
 
 COORD_DB_URL = "postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5442/coordinator_db"
 LEDGER1_DB_URL = "postgresql://ledgerguard_app:ledgerguard_app_secret@localhost:5443/ledger1_db"
@@ -595,3 +596,90 @@ def test_workflow_timeline_distinct_settlement_and_no_duplicate_on_retry(clean_a
     assert retry_types.count("SOURCE_CONFIRMED") == 1
     assert retry_types.count("DESTINATION_CONFIRMED") == 1
 
+
+def test_concurrent_recovery_workflow_event_uniqueness(clean_accounts: tuple[UUID, UUID]) -> None:
+    """Test 12: Concurrent recovery attempts enforce database-level event uniqueness and idempotent settlement."""
+    from psycopg.rows import dict_row
+
+    alice_id, bob_id = clean_accounts
+    transfer_id = uuid4()
+    idem_key = f"concurrent-tx-{transfer_id}"
+    amt = AmountPaise(400_00)
+
+    fp = FailpointManager()
+    fp.set_failpoint("FAIL_AFTER_COMMIT_BEFORE_SOURCE_CONFIRM", transfer_id)
+    with pytest.raises(CrashAfterCommitError):
+        submit_coordinator_transfer(
+            COORD_DB_URL,
+            LEDGER_URLS,
+            idempotency_key=idem_key,
+            source_account_id=alice_id,
+            destination_account_id=bob_id,
+            amount=amt,
+            transfer_id=transfer_id,
+            failpoint_mgr=fp,
+        )
+
+    # 2. Run two simultaneous recovery workers on the same interrupted transfer
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        fut1 = executor.submit(execute_two_phase_commit, COORD_DB_URL, transfer_id, LEDGER_URLS)
+        fut2 = executor.submit(execute_two_phase_commit, COORD_DB_URL, transfer_id, LEDGER_URLS)
+        res1 = fut1.result()
+        res2 = fut2.result()
+
+    assert res1["status"] == "SETTLED"
+    assert res2["status"] == "SETTLED"
+
+    # 3. Verify final transfer state in coordinator DB is SETTLED
+    with get_db_connection(COORD_DB_URL) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute("SELECT state FROM transfers WHERE transfer_id = %s;", (transfer_id,))
+            t_row = cur.fetchone()
+            assert t_row is not None
+            assert t_row["state"] == "SETTLED"
+
+            # 4. Verify exactly one event for each (transfer_id, event_type)
+            cur.execute(
+                "SELECT event_type, details FROM workflow_events WHERE transfer_id = %s ORDER BY created_at ASC;",
+                (transfer_id,),
+            )
+            events = cur.fetchall()
+
+    event_types = [e["event_type"] for e in events]
+    assert len(event_types) == 6, f"Expected exactly 6 unique events, got {len(event_types)}: {event_types}"
+    assert event_types.count("PHASE_PREPARE_STARTED") == 1
+    assert event_types.count("DECISION_MADE") == 1
+    assert event_types.count("DECISION_COMMITTED") == 1
+    assert event_types.count("SOURCE_CONFIRMED") == 1
+    assert event_types.count("DESTINATION_CONFIRMED") == 1
+    assert event_types.count("TRANSFER_SETTLED") == 1
+
+    # Verify event details metadata
+    sc_ev = next(e for e in events if e["event_type"] == "SOURCE_CONFIRMED")
+    dc_ev = next(e for e in events if e["event_type"] == "DESTINATION_CONFIRMED")
+    assert sc_ev["details"]["role"] == "source"
+    assert sc_ev["details"]["ledger_id"] == "ledger-1"
+    assert dc_ev["details"]["role"] == "destination"
+    assert dc_ev["details"]["ledger_id"] == "ledger-2"
+
+    # 5. Verify participant financial effects remain strictly idempotent
+    alice_bal = get_account_balance(LEDGER1_DB_URL, alice_id)
+    bob_bal = get_account_balance(LEDGER2_DB_URL, bob_id)
+    assert alice_bal.posted_balance_minor == 600_00
+    assert alice_bal.held_amount_minor == 0
+    assert alice_bal.available_balance_minor == 600_00
+    assert bob_bal.posted_balance_minor == 400_00
+    assert bob_bal.available_balance_minor == 400_00
+
+    # Verify single journal entry on participants
+    with get_db_connection(LEDGER1_DB_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM journal_headers WHERE transfer_id = %s;", (transfer_id,))
+            res = cur.fetchone()
+            assert res is not None and list(res.values())[0] == 1
+
+    with get_db_connection(LEDGER2_DB_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM journal_headers WHERE transfer_id = %s;", (transfer_id,))
+            res = cur.fetchone()
+            assert res is not None and list(res.values())[0] == 1

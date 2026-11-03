@@ -173,7 +173,8 @@ def record_durable_decision(
                 """
                 INSERT INTO workflow_events (
                     transfer_id, event_type, details
-                ) VALUES (%s, 'DECISION_MADE', %s);
+                ) VALUES (%s, 'DECISION_MADE', %s)
+                ON CONFLICT (transfer_id, event_type) DO NOTHING;
             """,
                 (transfer_id, Jsonb({"decision": decision, "reason": reason})),
             )

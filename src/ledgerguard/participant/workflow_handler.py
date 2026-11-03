@@ -117,6 +117,8 @@ def handle_source_confirm(
     transfer_id: UUID,
 ) -> dict[str, Any]:
     """Execute source confirmation: consume hold and post source settlement journal."""
+    import psycopg
+
     payload_hash = compute_payload_hash(
         {
             "command_id": command_id,
@@ -127,15 +129,27 @@ def handle_source_confirm(
 
     with get_db_connection(db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT source_confirm(%s, %s, %s) AS result;
-            """,
-                (command_id, transfer_id, payload_hash),
-            )
-            row = cur.fetchone()
-            result = row["result"] if row else {}
-        conn.commit()
+            try:
+                cur.execute(
+                    """
+                    SELECT source_confirm(%s, %s, %s) AS result;
+                """,
+                    (command_id, transfer_id, payload_hash),
+                )
+                row = cur.fetchone()
+                result = row["result"] if row else {}
+                conn.commit()
+            except psycopg.errors.UniqueViolation:
+                conn.rollback()
+                cur.execute(
+                    """
+                    SELECT result FROM command_inbox WHERE command_id = %s;
+                """,
+                    (command_id,),
+                )
+                row = cur.fetchone()
+                result = row["result"] if row else {"status": "CONFIRMED", "transfer_id": str(transfer_id)}
+                conn.commit()
 
     return dict(result)
 
@@ -146,6 +160,8 @@ def handle_destination_confirm(
     transfer_id: UUID,
 ) -> dict[str, Any]:
     """Execute destination confirmation: post destination settlement journal to credit recipient."""
+    import psycopg
+
     payload_hash = compute_payload_hash(
         {
             "command_id": command_id,
@@ -156,15 +172,27 @@ def handle_destination_confirm(
 
     with get_db_connection(db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT destination_confirm(%s, %s, %s) AS result;
-            """,
-                (command_id, transfer_id, payload_hash),
-            )
-            row = cur.fetchone()
-            result = row["result"] if row else {}
-        conn.commit()
+            try:
+                cur.execute(
+                    """
+                    SELECT destination_confirm(%s, %s, %s) AS result;
+                """,
+                    (command_id, transfer_id, payload_hash),
+                )
+                row = cur.fetchone()
+                result = row["result"] if row else {}
+                conn.commit()
+            except psycopg.errors.UniqueViolation:
+                conn.rollback()
+                cur.execute(
+                    """
+                    SELECT result FROM command_inbox WHERE command_id = %s;
+                """,
+                    (command_id,),
+                )
+                row = cur.fetchone()
+                result = row["result"] if row else {"status": "CONFIRMED", "transfer_id": str(transfer_id)}
+                conn.commit()
 
     return dict(result)
 
@@ -176,6 +204,8 @@ def handle_participant_cancel(
     reason: str | None = None,
 ) -> dict[str, Any]:
     """Execute participant cancellation: release hold or record cancellation tombstone."""
+    import psycopg
+
     payload_hash = compute_payload_hash(
         {
             "command_id": command_id,
@@ -187,15 +217,27 @@ def handle_participant_cancel(
 
     with get_db_connection(db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT apply_participant_cancel(%s, %s, %s) AS result;
-            """,
-                (command_id, transfer_id, payload_hash),
-            )
-            row = cur.fetchone()
-            result = row["result"] if row else {}
-        conn.commit()
+            try:
+                cur.execute(
+                    """
+                    SELECT apply_participant_cancel(%s, %s, %s) AS result;
+                """,
+                    (command_id, transfer_id, payload_hash),
+                )
+                row = cur.fetchone()
+                result = row["result"] if row else {}
+                conn.commit()
+            except psycopg.errors.UniqueViolation:
+                conn.rollback()
+                cur.execute(
+                    """
+                    SELECT result FROM command_inbox WHERE command_id = %s;
+                """,
+                    (command_id,),
+                )
+                row = cur.fetchone()
+                result = row["result"] if row else {"status": "CANCELLED", "transfer_id": str(transfer_id)}
+                conn.commit()
 
     return dict(result)
 

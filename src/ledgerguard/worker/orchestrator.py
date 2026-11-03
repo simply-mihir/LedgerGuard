@@ -44,7 +44,8 @@ def record_workflow_event(
         cur.execute(
             """
             INSERT INTO workflow_events (transfer_id, event_type, details, created_at)
-            VALUES (%s, %s, %s, NOW());
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (transfer_id, event_type) DO NOTHING;
         """,
             (transfer_id, event_type, Jsonb(details or {})),
         )
@@ -62,19 +63,9 @@ def record_workflow_event_once(
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT 1 FROM workflow_events
-            WHERE transfer_id = %s AND event_type = %s
-            LIMIT 1;
-        """,
-            (transfer_id, event_type),
-        )
-        if cur.fetchone():
-            return
-
-        cur.execute(
-            """
             INSERT INTO workflow_events (transfer_id, event_type, details, created_at)
-            VALUES (%s, %s, %s, NOW());
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (transfer_id, event_type) DO NOTHING;
         """,
             (transfer_id, event_type, Jsonb(details or {})),
         )
@@ -256,7 +247,12 @@ def execute_two_phase_commit(
             """,
                 (transfer_id,),
             )
-        record_workflow_event_once(conn, transfer_id, "PHASE_PREPARE_STARTED")
+        record_workflow_event_once(
+            conn,
+            transfer_id,
+            "PHASE_PREPARE_STARTED",
+            {"source_ledger_id": t["source_ledger_id"], "destination_ledger_id": t["destination_ledger_id"]},
+        )
         conn.commit()
 
     # Step 1: Source Prepare (reserve funds and create active hold)
@@ -350,7 +346,7 @@ def execute_two_phase_commit(
             """,
                 (transfer_id,),
             )
-        record_workflow_event_once(conn, transfer_id, "DECISION_COMMITTED")
+        record_workflow_event_once(conn, transfer_id, "DECISION_COMMITTED", {"decision": "COMMIT"})
         conn.commit()
 
     # Check failpoint: crash immediately after COMMIT recorded
