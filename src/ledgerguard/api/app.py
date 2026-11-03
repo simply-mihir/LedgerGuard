@@ -22,7 +22,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="LedgerGuard API",
         description="Financial ledger with verifiable accounting and recoverable transfers",
-        version="0.1.0",
+        version="1.0.0",
         lifespan=lifespan,
     )
 
@@ -36,7 +36,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["System"])
     def health_check() -> dict[str, str]:
-        return {"status": "UP", "version": "0.1.0"}
+        return {"status": "UP", "version": "1.0.0"}
 
     app.include_router(router)
     return app
