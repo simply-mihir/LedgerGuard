@@ -662,7 +662,7 @@ export default function OperatorConsole() {
         {/* ------------------------------------------------------------------ */}
         {activeTab === 'transfers' && (
           <div>
-            <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
                   Distributed Transfer Explorer (TCC Coordination)
@@ -676,7 +676,7 @@ export default function OperatorConsole() {
               </button>
             </div>
 
-            <div className="glass-panel" style={{ overflow: 'hidden', marginBottom: '1.5rem' }}>
+            <div className="glass-panel" style={{ overflow: 'hidden', marginBottom: '1rem' }}>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -755,8 +755,8 @@ export default function OperatorConsole() {
 
             {/* Transfer Timeline Panel */}
             {selectedTransfer && (
-              <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div className="glass-panel" style={{ padding: '1rem 1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                   <h3 style={{ fontSize: '1.125rem', fontWeight: 700 }}>
                     TCC Workflow Timeline: {selectedTransfer.transfer_id}
                   </h3>
@@ -769,31 +769,31 @@ export default function OperatorConsole() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                   {transferTimeline.map((ev, idx) => (
                     <div
                       key={ev.event_id}
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
-                        gap: '1rem',
-                        padding: '0.75rem',
+                        gap: '0.75rem',
+                        padding: '0.45rem 0.75rem',
                         background: 'rgba(0,0,0,0.2)',
-                        borderRadius: '8px',
+                        borderRadius: '6px',
                         borderLeft: '3px solid var(--accent-cyan)'
                       }}
                     >
-                      <span className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      <span className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', minWidth: '1.5rem' }}>
                         #{idx + 1}
                       </span>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--accent-cyan)' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--accent-cyan)' }}>
                               {ev.event_type}
                             </span>
                             {Boolean(ev.details && typeof ev.details === 'object' && (ev.details as Record<string, unknown>).role) && (
-                              <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                              <span style={{ fontSize: '0.6875rem', padding: '0.1rem 0.35rem', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', fontWeight: 600 }}>
                                 {String((ev.details as Record<string, unknown>).role).toUpperCase()} ({String((ev.details as Record<string, unknown>).ledger_id)})
                               </span>
                             )}
@@ -803,9 +803,9 @@ export default function OperatorConsole() {
                           </span>
                         </div>
                         {ev.details && Object.keys(ev.details).length > 0 && (
-                          <pre style={{ fontSize: '0.75rem', marginTop: '0.375rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.3)', padding: '0.375rem', borderRadius: '4px' }}>
-                            {JSON.stringify(ev.details, null, 2)}
-                          </pre>
+                          <div style={{ fontSize: '0.75rem', marginTop: '0.2rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.25)', padding: '0.2rem 0.45rem', borderRadius: '4px', fontFamily: 'monospace' }}>
+                            {Object.entries(ev.details).map(([k, v]) => `${k}: ${v}`).join('  •  ')}
+                          </div>
                         )}
                       </div>
                     </div>
