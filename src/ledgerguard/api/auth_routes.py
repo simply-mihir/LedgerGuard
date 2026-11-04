@@ -22,6 +22,7 @@ from ledgerguard.auth.service import (
     authenticate_operator,
     confirm_totp_enrollment,
     enroll_totp,
+    get_session_created_at,
     revoke_session,
     validate_session,
     verify_mfa_login,
@@ -188,10 +189,19 @@ def logout(
     summary="Initialize TOTP authenticator enrollment",
 )
 def enroll_mfa(
+    request: Request,
     operator: OperatorPublicInfo = Depends(require_operator),
 ) -> OperatorEnrollMfaResponse:
     """Generate a fresh TOTP secret for the active operator to scan into an authenticator."""
-    secret, uri, key = enroll_totp(operator.operator_id)
+    session_cookie = request.cookies.get(COOKIE_SESSION_NAME)
+    session_created_at = get_session_created_at(session_cookie) if session_cookie else None
+    try:
+        secret, uri, key = enroll_totp(operator.operator_id, current_session_created_at=session_created_at)
+    except AuthenticationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=exc.message,
+        ) from exc
     return OperatorEnrollMfaResponse(
         totp_secret=secret,
         provisioning_uri=uri,

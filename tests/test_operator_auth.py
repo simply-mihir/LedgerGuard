@@ -12,8 +12,13 @@ from starlette.testclient import TestClient
 
 from ledgerguard.api.app import app
 from ledgerguard.auth.models import CreateOperatorRequest
-from ledgerguard.auth.service import create_operator_account, enroll_totp
-from ledgerguard.auth.totp import get_totp_code
+from ledgerguard.auth.service import (
+    AuthenticationError,
+    authenticate_operator,
+    create_operator_account,
+    enroll_totp,
+)
+from ledgerguard.auth.totp import generate_totp_secret, get_totp_code, verify_totp_step
 from ledgerguard.config import settings
 
 client = TestClient(app)
@@ -373,3 +378,128 @@ def test_totp_enrollment_expiry(test_operator):
     with pytest.raises(AuthenticationError) as exc_info:
         confirm_totp_enrollment(op.operator_id, code)
     assert "expired" in str(exc_info.value).lower()
+
+
+def test_totp_drift_window():
+    """Verify that TOTP accepts codes within +-1 step (30s) drift window and rejects beyond."""
+    secret = generate_totp_secret()
+    base_time = 1700000000  # Fixed deterministic timestamp
+
+    # Exact current step
+    current_code = get_totp_code(secret, t=base_time)
+    valid, step = verify_totp_step(secret, current_code, t=base_time)
+    assert valid is True
+    assert step == base_time // 30
+
+    # Past drift: -30 seconds (-1 step) MUST be accepted
+    past_code = get_totp_code(secret, t=base_time - 30)
+    valid_past, step_past = verify_totp_step(secret, past_code, t=base_time)
+    assert valid_past is True
+    assert step_past == (base_time - 30) // 30
+
+    # Future drift: +30 seconds (+1 step) MUST be accepted
+    future_code = get_totp_code(secret, t=base_time + 30)
+    valid_future, step_future = verify_totp_step(secret, future_code, t=base_time)
+    assert valid_future is True
+    assert step_future == (base_time + 30) // 30
+
+    # Outside drift window: -60 seconds (-2 steps) MUST be rejected
+    too_old_code = get_totp_code(secret, t=base_time - 60)
+    valid_old, _ = verify_totp_step(secret, too_old_code, t=base_time)
+    assert valid_old is False
+
+    # Outside drift window: +60 seconds (+2 steps) MUST be rejected
+    too_future_code = get_totp_code(secret, t=base_time + 60)
+    valid_future_bad, _ = verify_totp_step(secret, too_future_code, t=base_time)
+    assert valid_future_bad is False
+
+
+@pytest.mark.integration
+def test_totp_repeated_mfa_failures_revokes_pending(test_operator):
+    """Verify that repeated invalid attempts during enrollment revoke the pending secret."""
+    op = test_operator["operator"]
+    from ledgerguard.auth.service import confirm_totp_enrollment
+
+    enroll_totp(op.operator_id)
+
+    # 3 consecutive failed confirmation attempts
+    for _ in range(3):
+        success = confirm_totp_enrollment(op.operator_id, "000000")
+        assert success is False
+
+    # Pending secret must now be wiped from coordinator DB
+    with psycopg.connect(settings.coordinator_admin_db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pending_totp_secret FROM operators WHERE operator_id = %s;",
+                (op.operator_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            assert row[0] is None, "Pending TOTP secret was not revoked after repeated failures!"
+
+
+@pytest.mark.integration
+def test_targeted_lockout_abuse_prevention(test_operator):
+    """Verify that an attacker failing 5 times from their IP does NOT deny service to the legitimate user on another IP."""
+    op = test_operator["operator"]
+    attacker_ip = "198.51.100.1"
+    legitimate_ip = "203.0.113.5"
+
+    # Attacker spams 5 failed password attempts for the target operator
+    for _ in range(5):
+        with pytest.raises(AuthenticationError):
+            authenticate_operator(
+                identifier=op.username,
+                password="WrongPasswordSpam99!",
+                ip_address=attacker_ip,
+            )
+
+    # 6th attempt from attacker IP is throttled
+    with pytest.raises(AuthenticationError) as exc_info:
+        authenticate_operator(
+            identifier=op.username,
+            password="WrongPasswordSpam99!",
+            ip_address=attacker_ip,
+        )
+    assert "restricted" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
+
+    # Legitimate operator authenticates from legitimate IP with correct password: MUST SUCCEED!
+    login_resp, raw_token, csrf_token = authenticate_operator(
+        identifier=op.username,
+        password=test_operator["password"],
+        ip_address=legitimate_ip,
+    )
+    assert login_resp.status == "SUCCESS"
+    assert raw_token is not None
+    assert csrf_token is not None
+
+
+@pytest.mark.integration
+def test_logout_csrf_rejection(test_operator):
+    """Verify that logout rejects requests with missing or tampered CSRF tokens when authenticated via cookie."""
+    op = test_operator["operator"]
+    login_resp = client.post(
+        "/v1/auth/login",
+        json={"identifier": op.username, "password": test_operator["password"]},
+    )
+    session_cookie = login_resp.cookies["ledgerguard_session"]
+
+    # 1. Missing CSRF token -> 403
+    bad_logout1 = client.post(
+        "/v1/auth/logout",
+        headers={"Cookie": f"ledgerguard_session={session_cookie}"},
+    )
+    assert bad_logout1.status_code == 403
+    assert "CSRF" in bad_logout1.json()["detail"]
+
+    # 2. Tampered CSRF token -> 403
+    bad_logout2 = client.post(
+        "/v1/auth/logout",
+        headers={
+            "Cookie": f"ledgerguard_session={session_cookie}",
+            "X-CSRF-Token": "invalid_tampered_csrf_token",
+        },
+    )
+    assert bad_logout2.status_code == 403
+    assert "CSRF" in bad_logout2.json()["detail"]

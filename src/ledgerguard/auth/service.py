@@ -114,22 +114,38 @@ def authenticate_operator(
     with get_db_connection(_get_coord_db_url()) as conn:
         cur: Any
         with conn.cursor(row_factory=dict_row) as cur:
-            # 1. Source-based and identifier-based rate limiting (15-minute bounded window)
-            cur.execute(
-                """
-                SELECT COUNT(*) as failed_count
-                FROM operator_login_attempts
-                WHERE identifier = %s
-                  AND success = FALSE
-                  AND attempted_at > NOW() - INTERVAL '15 minutes'
-                """,
-                (clean_identifier,),
-            )
-            row = cur.fetchone()
-            recent_failures = row["failed_count"] if row else 0
+            # 1. Identifier plus source-based rate limiting (15-minute bounded window)
+            source_id_failures = 0
+            if ip_address and ip_address != "testclient":
+                cur.execute(
+                    """
+                    SELECT COUNT(*) as failed_count
+                    FROM operator_login_attempts
+                    WHERE identifier = %s
+                      AND ip_address = %s
+                      AND success = FALSE
+                      AND attempted_at > NOW() - INTERVAL '15 minutes'
+                    """,
+                    (clean_identifier, ip_address),
+                )
+                row = cur.fetchone()
+                source_id_failures = row["failed_count"] if row else 0
+            else:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) as failed_count
+                    FROM operator_login_attempts
+                    WHERE identifier = %s
+                      AND success = FALSE
+                      AND attempted_at > NOW() - INTERVAL '15 minutes'
+                    """,
+                    (clean_identifier,),
+                )
+                row = cur.fetchone()
+                source_id_failures = row["failed_count"] if row else 0
 
-            # Progressive delay on repeated failures
-            _apply_progressive_delay(recent_failures, ip_address=ip_address)
+            # Progressive delay on repeated failures from this specific source
+            _apply_progressive_delay(source_id_failures, ip_address=ip_address)
 
             # Check source IP failure volume to prevent distributed stuffing
             ip_failures = 0
@@ -147,8 +163,8 @@ def authenticate_operator(
                 ip_row = cur.fetchone()
                 ip_failures = ip_row["ip_count"] if ip_row else 0
 
-            # Bounded window throttling: 5 failures for identifier or 30 for source IP
-            if recent_failures >= 5 or (ip_address and ip_address != "testclient" and ip_failures >= 30):
+            # Bounded window throttling: 5 failures for (identifier, ip_address) or 30 for source IP
+            if source_id_failures >= 5 or (ip_address and ip_address != "testclient" and ip_failures >= 30):
                 dummy_verify_password(password)
                 _record_login_attempt(cur, clean_identifier, ip_address, success=False, attempt_type="PASSWORD")
                 conn.commit()
@@ -166,7 +182,7 @@ def authenticate_operator(
             )
             operator = cur.fetchone()
 
-            # Account temporary lockout check
+            # Account temporary lockout check (e.g. from MFA lockouts or admin suspension)
             if operator and operator["locked_until"] and operator["locked_until"] > datetime.now(UTC):
                 dummy_verify_password(password)
                 _record_login_attempt(cur, clean_identifier, ip_address, success=False, attempt_type="PASSWORD")
@@ -187,7 +203,6 @@ def authenticate_operator(
                     """
                     UPDATE operators
                     SET failed_attempts = failed_attempts + 1,
-                        locked_until = CASE WHEN failed_attempts + 1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
                         updated_at = NOW()
                     WHERE operator_id = %s
                     """,
@@ -486,22 +501,49 @@ def create_operator_account(req: CreateOperatorRequest) -> OperatorPublicInfo:
             )
 
 
-def enroll_totp(operator_id: UUID) -> tuple[str, str, str]:
+def get_session_created_at(raw_token: str) -> datetime | None:
+    """Retrieve session creation timestamp to verify recent authentication."""
+    if not raw_token or len(raw_token) < 32:
+        return None
+    token_hash = _hash_token(raw_token)
+    with get_db_connection(_get_coord_db_url()) as conn:
+        cur: Any
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT created_at FROM operator_sessions WHERE session_token_hash = %s",
+                (token_hash,),
+            )
+            row = cur.fetchone()
+            return row["created_at"] if row else None
+
+
+def enroll_totp(
+    operator_id: UUID,
+    current_session_created_at: datetime | None = None,
+) -> tuple[str, str, str]:
     """Generate and stage a new TOTP secret in pending status for an operator.
 
     Pending enrollment expires in 10 minutes. Returns (secret, uri, grouped_manual_key).
+    Disabling/resetting MFA requires recent authentication within the last 5 minutes.
     """
     secret = generate_totp_secret()
     with get_db_connection(_get_coord_db_url()) as conn:
         cur: Any
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                "SELECT username FROM operators WHERE operator_id = %s",
+                "SELECT username, totp_enabled FROM operators WHERE operator_id = %s",
                 (operator_id,),
             )
             op = cur.fetchone()
             if not op:
                 raise AuthenticationError("Operator account not found.")
+
+            if op["totp_enabled"] and current_session_created_at is not None:
+                now = datetime.now(UTC)
+                if (now - current_session_created_at).total_seconds() > 300:
+                    raise AuthenticationError(
+                        "Resetting MFA requires recent authentication. Please re-authenticate."
+                    )
 
             cur.execute(
                 """
