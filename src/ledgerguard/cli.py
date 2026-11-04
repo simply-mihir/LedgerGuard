@@ -16,19 +16,59 @@ from ledgerguard.db.migrator import apply_migrations
 from ledgerguard.db.pool import get_db_connection
 
 
-def cmd_create_operator(args: argparse.Namespace) -> None:
-    """Create a new operator with Argon2id password hash and optional TOTP."""
-    password = args.password or os.environ.get("LEDGERGUARD_OPERATOR_PASSWORD")
-    if not password:
-        if sys.stdin.isatty():
-            password = getpass.getpass("Enter operator password: ")
+def _resolve_password(
+    stdin_password: bool,
+    env_var_name: str,
+    prompt_label: str,
+    require_confirmation: bool = True,
+    default_test_password: str | None = None,
+) -> str:
+    """Resolve password securely via stdin, test env var, or hidden getpass prompt."""
+    # 1. Protected stdin mode for CI/automation
+    if stdin_password:
+        line = sys.stdin.readline().strip()
+        if not line:
+            print("Error: Stdin was empty; password required.", file=sys.stderr)
+            sys.exit(1)
+        return line
+
+    # 2. Clearly named test-only environment mechanism
+    if settings.env in ("local", "test"):
+        test_pwd = os.environ.get("LEDGERGUARD_TEST_ADMIN_PASSWORD") or os.environ.get(env_var_name)
+        if test_pwd:
+            return test_pwd
+        if default_test_password:
+            return default_test_password
+
+    # 3. Hidden interactive prompt with confirmation
+    if sys.stdin.isatty():
+        pwd = getpass.getpass(f"Enter {prompt_label} password: ")
+        if not pwd:
+            print("Error: Password cannot be empty.", file=sys.stderr)
+            sys.exit(1)
+        if require_confirmation:
             confirm = getpass.getpass("Confirm password: ")
-            if password != confirm:
+            if pwd != confirm:
                 print("Error: Passwords do not match.", file=sys.stderr)
                 sys.exit(1)
-        else:
-            print("Error: Password must be provided via --password or LEDGERGUARD_OPERATOR_PASSWORD.", file=sys.stderr)
-            sys.exit(1)
+        return pwd
+
+    print(
+        "Error: Non-interactive environment. Provide password via stdin (--stdin-password) "
+        "or set LEDGERGUARD_TEST_ADMIN_PASSWORD in development/test.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def cmd_create_operator(args: argparse.Namespace) -> None:
+    """Create a new operator with Argon2id password hash and optional TOTP."""
+    password = _resolve_password(
+        stdin_password=args.stdin_password,
+        env_var_name="LEDGERGUARD_OPERATOR_PASSWORD",
+        prompt_label="operator",
+        require_confirmation=True,
+    )
 
     req = CreateOperatorRequest(
         username=args.username,
@@ -49,9 +89,6 @@ def cmd_seed_demo_operator(args: argparse.Namespace) -> None:
     """Seed demo operator account for development/CI if not already present."""
     username = args.username
     email = args.email
-    password = args.password or os.environ.get("LEDGERGUARD_DEMO_PASSWORD")
-    if not password:
-        password = "DemoOperator2026!Secure"
 
     with get_db_connection(settings.coordinator_db_url) as conn:
         cur: Any
@@ -64,6 +101,14 @@ def cmd_seed_demo_operator(args: argparse.Namespace) -> None:
             if existing:
                 print(f"Demo operator already exists: {existing['username']} ({existing['operator_id']})")
                 return
+
+    password = _resolve_password(
+        stdin_password=args.stdin_password,
+        env_var_name="LEDGERGUARD_DEMO_PASSWORD",
+        prompt_label="demo operator",
+        require_confirmation=False,
+        default_test_password="DemoOperator2026!Secure" if settings.env in ("local", "test") else None,
+    )
 
     req = CreateOperatorRequest(
         username=username,
@@ -139,9 +184,9 @@ def main() -> None:
     operator_parser.add_argument("--username", required=True, help="Operator username")
     operator_parser.add_argument("--email", required=True, help="Operator email address")
     operator_parser.add_argument(
-        "--password",
-        default=None,
-        help="Plaintext password (reads from LEDGERGUARD_OPERATOR_PASSWORD env var or prompts if omitted)",
+        "--stdin-password",
+        action="store_true",
+        help="Read operator password securely from standard input (recommended for non-interactive CI)",
     )
     operator_parser.add_argument(
         "--role",
@@ -158,16 +203,16 @@ def main() -> None:
 
     seed_parser = subparsers.add_parser(
         "seed-demo-operator",
-        help="Provision local demo operator if not already present (reads LEDGERGUARD_DEMO_PASSWORD env)",
+        help="Provision local demo operator if not already present (reads LEDGERGUARD_TEST_ADMIN_PASSWORD in dev/test)",
     )
     seed_parser.add_argument("--username", default="operator", help="Demo username (default: operator)")
     seed_parser.add_argument(
         "--email", default="operator@ledgerguard.internal", help="Demo email (default: operator@ledgerguard.internal)"
     )
     seed_parser.add_argument(
-        "--password",
-        default=None,
-        help="Demo password (defaults to LEDGERGUARD_DEMO_PASSWORD env var or prompts)",
+        "--stdin-password",
+        action="store_true",
+        help="Read demo operator password securely from standard input (recommended for CI)",
     )
     seed_parser.add_argument(
         "--enable-totp",

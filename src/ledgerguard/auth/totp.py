@@ -32,6 +32,39 @@ def get_totp_code(secret_b32: str, t: int | None = None, step: int = 30) -> str:
     return f"{code_int:06d}"
 
 
+def verify_totp_step(
+    secret_b32: str,
+    code: str,
+    last_accepted_step: int | None = None,
+    t: int | None = None,
+    step: int = 30,
+    drift: int = 1,
+) -> tuple[bool, int | None]:
+    """Verify a 6-digit TOTP code and reject replay within the same or earlier time step.
+
+    Returns (is_valid, accepted_step). If valid, accepted_step is the matched counter value.
+    If code matches a step <= last_accepted_step, it is rejected as a replay attack.
+    """
+    clean_code = code.strip()
+    if len(clean_code) != 6 or not clean_code.isdigit():
+        return False, None
+
+    if t is None:
+        t = int(time.time())
+
+    current_step = t // step
+    for delta in range(-drift, drift + 1):
+        candidate_step = current_step + delta
+        step_time = candidate_step * step
+        expected_code = get_totp_code(secret_b32, t=step_time, step=step)
+        if secrets.compare_digest(expected_code, clean_code):
+            # Check replay against last accepted step
+            if last_accepted_step is not None and candidate_step <= last_accepted_step:
+                return False, None
+            return True, candidate_step
+    return False, None
+
+
 def verify_totp_code(
     secret_b32: str,
     code: str,
@@ -40,20 +73,8 @@ def verify_totp_code(
     drift: int = 1,
 ) -> bool:
     """Verify a 6-digit TOTP code with time-step drift tolerance (default +-1 step = +-30s)."""
-    clean_code = code.strip()
-    if len(clean_code) != 6 or not clean_code.isdigit():
-        return False
-
-    if t is None:
-        t = int(time.time())
-
-    current_step = t // step
-    for delta in range(-drift, drift + 1):
-        step_time = (current_step + delta) * step
-        expected_code = get_totp_code(secret_b32, t=step_time, step=step)
-        if secrets.compare_digest(expected_code, clean_code):
-            return True
-    return False
+    valid, _ = verify_totp_step(secret_b32, code, t=t, step=step, drift=drift)
+    return valid
 
 
 def get_totp_uri(
