@@ -306,6 +306,7 @@ def test_csrf_protection_and_origin_validation(test_operator):
 def test_cookie_security_and_proxy_boundary(monkeypatch):
     """Verify cookie security policy: direct local HTTP, production Secure enforcement, and spoofed proxy protection."""
     from starlette.requests import Request
+
     from ledgerguard.api.auth_routes import is_cookie_secure
 
     # 1. Direct local development over HTTP -> Secure is False

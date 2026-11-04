@@ -84,10 +84,9 @@ def scan_tracked_files() -> list[str]:
             errors.append(f"Personal/Cloud API token detected in {rel_path}")
 
         # Absolute paths (/Users/ or /home/)
-        if "/Users/" in content:
-            errors.append(f"Absolute macOS /Users/ path detected in {rel_path}")
-        if "/home/" in content and "docker" not in rel_path and "UV_BIN" not in content and "bash" not in rel_path:
-            errors.append(f"Absolute Linux /home/ path detected in {rel_path}")
+        if rel_path != "scripts/security_audit_scanner.py":
+            if USER_PATH_PATTERN.search(content):
+                errors.append(f"Absolute user path detected in {rel_path}")
 
     return errors
 
@@ -106,8 +105,15 @@ def scan_commit_diffs(base_sha: str = "5f3db8b") -> list[str]:
     if API_TOKEN_PATTERN.search(diff_text):
         errors.append("Personal/Cloud API token detected in branch commit history diffs.")
 
-    if "/Users/" in diff_text:
-        errors.append("Absolute /Users/ path detected in branch commit diffs.")
+    # Search for user paths in diffs, skipping self-references in security_audit_scanner.py
+    for match in USER_PATH_PATTERN.finditer(diff_text):
+        matched_str = match.group(0)
+        start = max(0, match.start() - 250)
+        context = diff_text[start:match.end() + 250]
+        if "security_audit_scanner.py" in context:
+            continue
+        errors.append(f"Absolute user path detected in branch commit diffs: {matched_str}")
+        break
 
     emails = CONSUMER_EMAIL_PATTERN.findall(diff_text)
     if emails:
