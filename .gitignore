@@ -19,6 +19,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!apps/console/lib/
 lib64/
 parts/
 sdist/
@@ -44,6 +45,7 @@ out/
 apps/console/.next/
 apps/console/out/
 apps/console/node_modules/
+*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
