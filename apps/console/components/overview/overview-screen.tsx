@@ -70,8 +70,10 @@ export function OverviewScreen({
               Distributed Ledger Control Plane
             </span>
             <span style={{ color: '#475569' }}>•</span>
-            <Badge variant="mint" size="sm" dot={true}>
-              Cluster Operational
+            <Badge variant={overview && Object.values(overview.reachability).every(Boolean) ? 'mint' : 'rose'} size="sm" dot={true}>
+              {overview
+                ? `${Object.values(overview.reachability).filter(Boolean).length}/${Object.keys(overview.reachability).length} Nodes Reachable`
+                : '3/3 Nodes Reachable'}
             </Badge>
             {lastRefreshedAt && (
               <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
