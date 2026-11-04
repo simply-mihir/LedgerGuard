@@ -191,6 +191,7 @@ function LoginForm() {
                       onChange={(e) => setIdentifier(e.target.value)}
                       placeholder="operator or user@ledgerguard.internal"
                       className="w-full bg-[#FAF9F5] border border-[#E5E2DA] px-3.5 py-2.5 text-sm text-[#171717] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#1D4ED8] focus:ring-1 focus:ring-[#1D4ED8] transition-colors"
+                      style={{ minHeight: '44px', padding: '8px 12px' }}
                       disabled={isSubmitting}
                     />
                   </div>
@@ -204,6 +205,7 @@ function LoginForm() {
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         className="text-xs text-[#737373] hover:text-[#171717] bg-transparent border-0 cursor-pointer"
+                        style={{ minHeight: '24px', minWidth: '40px', padding: '4px' }}
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
                       >
                         {showPassword ? 'Hide' : 'Show'}
@@ -219,6 +221,7 @@ function LoginForm() {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••••••"
                       className="w-full bg-[#FAF9F5] border border-[#E5E2DA] px-3.5 py-2.5 text-sm text-[#171717] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#1D4ED8] focus:ring-1 focus:ring-[#1D4ED8] transition-colors"
+                      style={{ minHeight: '44px', padding: '8px 12px' }}
                       disabled={isSubmitting}
                     />
                   </div>
@@ -226,7 +229,8 @@ function LoginForm() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full mt-2 bg-[#171717] hover:bg-[#1D4ED8] text-white text-xs font-mono uppercase tracking-widest py-3 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer border-0"
+                    className="w-full bg-[#171717] hover:bg-[#1D4ED8] text-white text-xs font-mono uppercase tracking-widest py-3 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer border-0"
+                    style={{ minHeight: '44px', marginTop: '1rem' }}
                   >
                     {isSubmitting ? 'Authenticating...' : 'Authenticate Operator'}
                   </button>
@@ -274,6 +278,7 @@ function LoginForm() {
                     type="submit"
                     disabled={isSubmitting || mfaCode.length !== 6}
                     className="w-full bg-[#1D4ED8] hover:bg-[#1E40AF] text-white text-xs font-mono uppercase tracking-widest py-3 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer border-0"
+                    style={{ minHeight: '44px', marginTop: '1rem' }}
                   >
                     {isSubmitting ? 'Verifying Code...' : 'Verify & Enter Console'}
                   </button>
@@ -285,7 +290,8 @@ function LoginForm() {
                       setMfaCode('');
                       setErrorMessage(null);
                     }}
-                    className="text-xs text-[#737373] hover:text-[#171717] text-center bg-transparent border-0 cursor-pointer py-1"
+                    className="text-xs text-[#737373] hover:text-[#171717] text-center bg-transparent border-0 cursor-pointer"
+                    style={{ minHeight: '24px', padding: '6px 8px' }}
                   >
                     &larr; Re-enter credentials
                   </button>

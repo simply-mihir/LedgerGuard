@@ -17,13 +17,13 @@ const EVENT_DESCRIPTIONS: Record<string, { label: string; stage: string; color: 
   SOURCE_PREPARE_REJECTED: {
     label: 'Source Prepare Rejected',
     stage: 'PHASE 1: TRY / PREPARE',
-    color: '#EF4444',
+    color: '#F87171',
     desc: 'Source participant rejected hold (insufficient available balance or inactive account status).',
   },
   DESTINATION_PREPARE_REJECTED: {
     label: 'Destination Prepare Rejected',
     stage: 'PHASE 1: TRY / PREPARE',
-    color: '#EF4444',
+    color: '#F87171',
     desc: 'Destination participant rejected intent registration.',
   },
   DECISION_MADE: {
@@ -59,19 +59,19 @@ const EVENT_DESCRIPTIONS: Record<string, { label: string; stage: string; color: 
   SOURCE_CANCELLED: {
     label: 'Source Hold Released',
     stage: 'PHASE 3: CANCELLATION ROLLBACK',
-    color: '#EF4444',
+    color: '#F87171',
     desc: 'Source ledger cancelled hold reservation, returning available balance to sender without journal debit.',
   },
   DESTINATION_CANCELLED: {
     label: 'Destination Intent Discarded',
     stage: 'PHASE 3: CANCELLATION ROLLBACK',
-    color: '#EF4444',
+    color: '#F87171',
     desc: 'Destination ledger discarded pending incoming transfer intent.',
   },
   TRANSFER_CANCELLED: {
     label: 'Transfer Cancelled',
     stage: 'TERMINAL CONVERGENCE',
-    color: '#EF4444',
+    color: '#F87171',
     desc: 'Transfer closed in CANCELLED terminal state. No funds moved across clearing boundary.',
   },
 };
@@ -214,29 +214,35 @@ export default function TransferDetailPage() {
                   style={{ backgroundColor: meta.color }}
                 />
 
-                <div className={`p-4 bg-[#0B0F17] border ${isDecisionBoundary ? 'border-[#10B981] shadow-[0_0_20px_rgba(16,185,129,0.15)]' : 'border-[#1E293B]'}`}>
+                <div
+                  className={`p-4 bg-[#0B0F17] border ${isDecisionBoundary ? 'border-[#10B981] shadow-[0_0_20px_rgba(16,185,129,0.15)]' : 'border-[#1E293B]'}`}
+                  style={{ backgroundColor: '#0B0F17' }}
+                >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-2 border-b border-[#1E293B]/60">
                     <div>
                       <span className="text-[10px] font-mono uppercase tracking-wider block" style={{ color: meta.color }}>
                         {meta.stage}
                       </span>
-                      <h3 className="text-sm font-mono font-bold text-white mt-0.5">
+                      <h3 className="text-sm font-mono font-bold mt-0.5" style={{ color: '#FFFFFF' }}>
                         {evt.event_type}
                       </h3>
                     </div>
-                    <span className="text-[11px] font-mono text-[#64748B]">
+                    <span className="text-[11px] font-mono" style={{ color: '#94A3B8' }}>
                       {new Date(evt.created_at).toLocaleTimeString()} ({new Date(evt.created_at).toISOString()})
                     </span>
                   </div>
 
-                  <p className="text-xs text-[#CBD5E1] mt-2 leading-relaxed">
+                  <p className="text-xs mt-2 leading-relaxed" style={{ color: '#E2E8F0' }}>
                     {meta.desc}
                   </p>
 
                   {/* Optional Details Payload */}
                   {evt.details && Object.keys(evt.details).length > 0 && (
-                    <div className="mt-3 p-2.5 bg-[#0F172A] border border-[#1E293B] text-[11px] font-mono text-[#94A3B8]">
-                      <div className="text-[10px] text-[#64748B] uppercase mb-1">Event Payload Details:</div>
+                    <div
+                      className="mt-3 p-2.5 border border-[#1E293B] text-[11px] font-mono"
+                      style={{ backgroundColor: '#0F172A', color: '#94A3B8' }}
+                    >
+                      <div className="text-[10px] uppercase mb-1" style={{ color: '#94A3B8' }}>Event Payload Details:</div>
                       <pre className="m-0 overflow-x-auto whitespace-pre-wrap">
                         {JSON.stringify(evt.details, null, 2)}
                       </pre>
@@ -244,7 +250,10 @@ export default function TransferDetailPage() {
                   )}
 
                   {isDecisionBoundary && (
-                    <div className="mt-3 p-2 bg-[#064E3B]/30 border-l-2 border-[#10B981] text-[11px] text-[#A7F3D0]">
+                    <div
+                      className="mt-3 p-2 border-l-2 border-[#10B981] text-[11px]"
+                      style={{ backgroundColor: 'rgba(6, 78, 59, 0.4)', color: '#A7F3D0' }}
+                    >
                       <strong>Point of No Return:</strong> The coordinator has durably committed this transfer. Even if a crash or network partition occurs immediately after this boundary, the worker orchestrator will forward-recover participants without aborting.
                     </div>
                   )}

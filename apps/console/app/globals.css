@@ -13,8 +13,8 @@
   /* Precise Ink Typography */
   --text-ink: #111418;
   --text-ink-secondary: #4B525D;
-  --text-ink-muted: #7E8695;
-  --text-ink-faint: #A6ADB8;
+  --text-ink-muted: #475467;
+  --text-ink-faint: #98A2B3;
 
   /* Fine Line Dividers */
   --border-stone: #E5E2DA;
@@ -35,12 +35,12 @@
   --bg-operational-elevated: #1B2330;
   --text-operational: #F0F4F8;
   --text-operational-secondary: #94A3B8;
-  --text-operational-muted: #64748B;
+  --text-operational-muted: #94A3B8;
   --border-operational: rgba(255, 255, 255, 0.08);
   --border-operational-strong: rgba(255, 255, 255, 0.16);
 
   /* Status Colors (Muted Institutional Semantics) */
-  --status-success: #059669;
+  --status-success: #047857;
   --status-success-bg: rgba(5, 150, 105, 0.08);
   --status-success-border: rgba(5, 150, 105, 0.25);
   --status-success-dark: #10B981;
@@ -50,9 +50,9 @@
   --status-warning-border: rgba(217, 119, 6, 0.25);
   --status-warning-dark: #F59E0B;
 
-  --status-critical: #DC2626;
-  --status-critical-bg: rgba(220, 38, 38, 0.08);
-  --status-critical-border: rgba(220, 38, 38, 0.25);
+  --status-critical: #B91C1C;
+  --status-critical-bg: rgba(185, 28, 28, 0.08);
+  --status-critical-border: rgba(185, 28, 28, 0.25);
   --status-critical-dark: #EF4444;
 
   /* Typography Stacks */

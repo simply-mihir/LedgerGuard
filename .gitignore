@@ -37,6 +37,9 @@ wheels/
 .coverage
 htmlcov/
 coverage.xml
+playwright-report/
+test-results/
+blob-report/
 
 # Node & Next.js
 node_modules/

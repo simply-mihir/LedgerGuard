@@ -341,7 +341,11 @@ export default function ConsoleOverviewPage() {
               {transfers.slice(0, 8).map((tx) => (
                 <tr key={tx.transfer_id} className="hover:bg-[#1E293B]/40 transition-colors">
                   <td className="py-3 font-semibold text-white">
-                    <Link href={`/console/transfers/${tx.transfer_id}`} className="text-inherit hover:text-[#38BDF8] no-underline">
+                    <Link
+                      href={`/console/transfers/${tx.transfer_id}`}
+                      className="text-inherit hover:text-[#38BDF8] no-underline"
+                      style={{ display: 'inline-block', minHeight: '24px', lineHeight: '24px' }}
+                    >
                       {tx.transfer_id.slice(0, 8)}...
                     </Link>
                   </td>
@@ -375,13 +379,14 @@ export default function ConsoleOverviewPage() {
                       {tx.state}
                     </span>
                   </td>
-                  <td className="py-3 text-[11px] text-[#64748B]">
+                  <td className="py-3 text-[11px] text-[#94A3B8]">
                     {new Date(tx.created_at).toLocaleTimeString()}
                   </td>
                   <td className="py-3 text-right">
                     <Link
                       href={`/console/transfers/${tx.transfer_id}`}
                       className="text-[#38BDF8] hover:underline"
+                      style={{ display: 'inline-block', minHeight: '24px', lineHeight: '24px', padding: '0 4px' }}
                     >
                       Inspect &rarr;
                     </Link>

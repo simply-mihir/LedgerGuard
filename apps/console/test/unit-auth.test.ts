@@ -1,7 +1,7 @@
 /**
- * Browser-level authentication and security test suite for LedgerGuard Console.
- * Validates authentication redirection, safe return targets, MFA workflows,
- * session lifecycle, CSRF enforcement, keyboard navigation, and reduced-motion behavior.
+ * Source-level simulated authentication unit test suite for LedgerGuard Console.
+ * Validates authentication redirection logic, safe return targets, MFA workflows,
+ * session lifecycle models, CSRF enforcement, keyboard navigation, and reduced-motion behavior.
  */
 
 import { describe, it } from 'node:test';
