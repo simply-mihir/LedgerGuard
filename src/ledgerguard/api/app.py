@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ledgerguard.api.auth_routes import auth_router
 from ledgerguard.api.routes import router
 from ledgerguard.db.pool import close_all_pools
 
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     def health_check() -> dict[str, str]:
         return {"status": "UP", "version": "1.0.0"}
 
+    app.include_router(auth_router)
     app.include_router(router)
     return app
 

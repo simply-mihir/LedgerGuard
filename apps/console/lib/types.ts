@@ -3,7 +3,29 @@
  * Matches backend API schemas and domain models.
  */
 
-export type NavigationTab = 'overview' | 'accounts' | 'transfers' | 'reconciliation' | 'experiments';
+export type NavigationTab = 'overview' | 'accounts' | 'transfers' | 'reconciliation' | 'experiments' | 'security';
+
+export interface OperatorPublicInfo {
+  operator_id: string;
+  username: string;
+  email: string;
+  role: 'OPERATOR' | 'ADMIN' | 'AUDITOR';
+  totp_enabled: boolean;
+}
+
+export interface LoginResponse {
+  status: 'SUCCESS' | 'MFA_REQUIRED';
+  temp_token?: string;
+  csrf_token?: string;
+  operator?: OperatorPublicInfo;
+  message: string;
+}
+
+export interface SessionResponse {
+  authenticated: boolean;
+  operator?: OperatorPublicInfo;
+  csrf_token?: string;
+}
 
 export interface OverviewData {
   reachability: Record<string, boolean>;

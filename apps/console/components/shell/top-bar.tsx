@@ -32,6 +32,10 @@ const TAB_METADATA: Record<NavigationTab, { title: string; subtitle: string }> =
     title: 'Failure Lab',
     subtitle: 'Deterministic crash injection & autonomous forward recovery tests',
   },
+  security: {
+    title: 'Operator Security & Identity',
+    subtitle: 'Active session credentials, TOTP verification state & isolation boundaries',
+  },
 };
 
 export function TopBar({

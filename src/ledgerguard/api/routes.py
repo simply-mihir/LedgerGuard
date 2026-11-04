@@ -483,7 +483,7 @@ def get_reconciliation_run(run_id: str) -> ReconciliationRunResponse:
 
 
 @router.get("/operator/overview", response_model=SystemOverviewResponse)
-def get_operator_overview() -> SystemOverviewResponse:
+def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverviewResponse:
     """Return consolidated platform overview metrics and service reachability."""
     reachability = {}
     for name, url in [
@@ -573,7 +573,7 @@ def get_operator_overview() -> SystemOverviewResponse:
 
 
 @router.get("/operator/accounts", response_model=list[DirectoryAccountResponse])
-def get_operator_accounts() -> list[DirectoryAccountResponse]:
+def get_operator_accounts(_: None = Depends(verify_bearer_token)) -> list[DirectoryAccountResponse]:
     """Return all provisioned customer accounts across participants."""
     results: list[DirectoryAccountResponse] = []
     with get_db_connection(settings.coordinator_db_url) as conn:
@@ -617,7 +617,9 @@ def get_operator_accounts() -> list[DirectoryAccountResponse]:
 
 
 @router.get("/operator/transfers")
-def get_operator_transfers(limit: int = 50) -> list[dict[str, Any]]:
+def get_operator_transfers(
+    limit: int = 50, _: None = Depends(verify_bearer_token)
+) -> list[dict[str, Any]]:
     """Return list of recent transfers with state and decision."""
     with get_db_connection(settings.coordinator_db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
@@ -644,7 +646,9 @@ def get_operator_transfers(limit: int = 50) -> list[dict[str, Any]]:
     "/operator/transfers/{transfer_id}/timeline",
     response_model=list[WorkflowTimelineEntryResponse],
 )
-def get_transfer_timeline(transfer_id: UUID) -> list[WorkflowTimelineEntryResponse]:
+def get_transfer_timeline(
+    transfer_id: UUID, _: None = Depends(verify_bearer_token)
+) -> list[WorkflowTimelineEntryResponse]:
     """Retrieve full chronological workflow events for a transfer."""
     with get_db_connection(settings.coordinator_db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:

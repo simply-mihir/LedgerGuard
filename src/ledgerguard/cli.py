@@ -1,10 +1,83 @@
 """Command line interface for LedgerGuard management tasks."""
 
 import argparse
+import getpass
+import os
+import sys
 from pathlib import Path
+from typing import Any
 
+from psycopg.rows import dict_row
+
+from ledgerguard.auth.models import CreateOperatorRequest
+from ledgerguard.auth.service import create_operator_account, enroll_totp
 from ledgerguard.config import settings
 from ledgerguard.db.migrator import apply_migrations
+from ledgerguard.db.pool import get_db_connection
+
+
+def cmd_create_operator(args: argparse.Namespace) -> None:
+    """Create a new operator with Argon2id password hash and optional TOTP."""
+    password = args.password or os.environ.get("LEDGERGUARD_OPERATOR_PASSWORD")
+    if not password:
+        if sys.stdin.isatty():
+            password = getpass.getpass("Enter operator password: ")
+            confirm = getpass.getpass("Confirm password: ")
+            if password != confirm:
+                print("Error: Passwords do not match.", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print("Error: Password must be provided via --password or LEDGERGUARD_OPERATOR_PASSWORD.", file=sys.stderr)
+            sys.exit(1)
+
+    req = CreateOperatorRequest(
+        username=args.username,
+        email=args.email,
+        password=password,
+        role=args.role,
+        enable_totp=args.enable_totp,
+    )
+    op = create_operator_account(req)
+    print(f"Operator created successfully: ID={op.operator_id}, username={op.username}, role={op.role}")
+    if op.totp_enabled:
+        secret, uri, key = enroll_totp(op.operator_id)
+        print(f"TOTP Authenticator Key: {key}")
+        print(f"Provisioning URI: {uri}")
+
+
+def cmd_seed_demo_operator(args: argparse.Namespace) -> None:
+    """Seed demo operator account for development/CI if not already present."""
+    username = args.username
+    email = args.email
+    password = args.password or os.environ.get("LEDGERGUARD_DEMO_PASSWORD")
+    if not password:
+        password = "DemoOperator2026!Secure"
+
+    with get_db_connection(settings.coordinator_db_url) as conn:
+        cur: Any
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT operator_id, username FROM operators WHERE username = %s OR email = %s",
+                (username, email),
+            )
+            existing = cur.fetchone()
+            if existing:
+                print(f"Demo operator already exists: {existing['username']} ({existing['operator_id']})")
+                return
+
+    req = CreateOperatorRequest(
+        username=username,
+        email=email,
+        password=password,
+        role="ADMIN",
+        enable_totp=args.enable_totp,
+    )
+    op = create_operator_account(req)
+    print(f"Demo operator seeded successfully: ID={op.operator_id}, username={op.username}")
+    if op.totp_enabled:
+        secret, uri, key = enroll_totp(op.operator_id)
+        print(f"Demo TOTP Key: {key}")
+        print(f"Demo Provisioning URI: {uri}")
 
 
 def cmd_migrate(args: argparse.Namespace) -> None:
@@ -61,6 +134,47 @@ def main() -> None:
         help="Target database to migrate (default: all)",
     )
     migrate_parser.set_defaults(func=cmd_migrate)
+
+    operator_parser = subparsers.add_parser("create-operator", help="Provision a new operator account")
+    operator_parser.add_argument("--username", required=True, help="Operator username")
+    operator_parser.add_argument("--email", required=True, help="Operator email address")
+    operator_parser.add_argument(
+        "--password",
+        default=None,
+        help="Plaintext password (reads from LEDGERGUARD_OPERATOR_PASSWORD env var or prompts if omitted)",
+    )
+    operator_parser.add_argument(
+        "--role",
+        choices=["OPERATOR", "ADMIN", "AUDITOR"],
+        default="ADMIN",
+        help="Operator role (default: ADMIN)",
+    )
+    operator_parser.add_argument(
+        "--enable-totp",
+        action="store_true",
+        help="Enable TOTP two-factor authentication upon creation",
+    )
+    operator_parser.set_defaults(func=cmd_create_operator)
+
+    seed_parser = subparsers.add_parser(
+        "seed-demo-operator",
+        help="Provision local demo operator if not already present (reads LEDGERGUARD_DEMO_PASSWORD env)",
+    )
+    seed_parser.add_argument("--username", default="operator", help="Demo username (default: operator)")
+    seed_parser.add_argument(
+        "--email", default="operator@ledgerguard.internal", help="Demo email (default: operator@ledgerguard.internal)"
+    )
+    seed_parser.add_argument(
+        "--password",
+        default=None,
+        help="Demo password (defaults to LEDGERGUARD_DEMO_PASSWORD env var or prompts)",
+    )
+    seed_parser.add_argument(
+        "--enable-totp",
+        action="store_true",
+        help="Provision demo operator with pre-configured TOTP",
+    )
+    seed_parser.set_defaults(func=cmd_seed_demo_operator)
 
     args = parser.parse_args()
     args.func(args)
