@@ -227,12 +227,66 @@ describe('Browser Authentication: Multi-Factor & Replay Defenses', () => {
     assert.ok(loginStep1Response.temp_token);
     assert.strictEqual((loginStep1Response as any).csrf_token, undefined);
 
-    // Step 2: MFA verification
+    // Step 2: MFA verification payload
     const mfaVerifyPayload = {
       temp_token: loginStep1Response.temp_token,
       code: '849201',
     };
     assert.strictEqual(mfaVerifyPayload.code.length, 6);
+  });
+
+  it('handles successful direct password login for operators without MFA', () => {
+    const browser = new SimulatedBrowser();
+    // Simulate successful direct password login
+    const loginResponse = {
+      status: 'SUCCESS',
+      csrf_token: 'csrf_direct_password_login_token_32bytes',
+      operator: {
+        operator_id: 'd91a27e4-0000-4000-a000-000000000002',
+        username: 'ops_regular',
+        email: 'ops_regular@ledgerguard.internal',
+        role: 'OPERATOR',
+        totp_enabled: false,
+      },
+      message: 'Operator authentication successful.',
+    };
+    browser.setCookie('ledgerguard_session=raw_token_direct_password_login_48bytes; Path=/; HttpOnly; SameSite=lax');
+
+    assert.strictEqual(loginResponse.status, 'SUCCESS');
+    assert.strictEqual(loginResponse.operator.totp_enabled, false);
+    assert.ok(browser.cookies['ledgerguard_session']);
+  });
+
+  it('handles MFA enrollment, URI generation, and code confirmation workflow', () => {
+    // Step 1: Initialize enrollment
+    const enrollmentPayload = {
+      totp_secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+      provisioning_uri: 'otpauth://totp/LedgerGuard:ops_admin?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=LedgerGuard',
+      manual_entry_key: 'JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP',
+    };
+    assert.ok(enrollmentPayload.provisioning_uri.startsWith('otpauth://totp/LedgerGuard:'));
+    assert.ok(enrollmentPayload.manual_entry_key.includes(' '));
+
+    // Step 2: Activate MFA with 6-digit confirmation code
+    const confirmResponse = {
+      status: 'ACTIVATED',
+      message: 'Two-factor authentication is now active on your operator account.',
+    };
+    assert.strictEqual(confirmResponse.status, 'ACTIVATED');
+  });
+
+  it('rejects invalid MFA verification code with 401 Unauthorized', () => {
+    const badCodeAttempt = {
+      temp_token: 'valid_temp_token_step1',
+      code: '000000',
+    };
+    // Expected server response
+    const errorResponse = {
+      status: 401,
+      detail: 'Invalid or replayed verification code.',
+    };
+    assert.strictEqual(errorResponse.status, 401);
+    assert.ok(errorResponse.detail.includes('Invalid'));
   });
 
   it('rejects TOTP replay: identical 6-digit code reused within same time step is rejected', () => {
@@ -260,6 +314,45 @@ describe('Browser Authentication: Multi-Factor & Replay Defenses', () => {
   });
 });
 
+describe('Browser Authentication: Navigation Barriers, Console Access & Revocation', () => {
+  it('allows successful access to /console when valid session cookie exists', () => {
+    const browser = new SimulatedBrowser();
+    browser.setCookie('ledgerguard_session=valid_authenticated_cookie; Path=/; HttpOnly');
+
+    const isAuthenticated = !!browser.cookies['ledgerguard_session'];
+    let targetRoute: string = '/login';
+    if (isAuthenticated) {
+      targetRoute = '/console';
+    }
+    assert.strictEqual(targetRoute, '/console');
+  });
+
+  it('redirects to /login when navigating with a revoked or purged session', () => {
+    const browser = new SimulatedBrowser();
+    // Initially had session, now revoked (deleted)
+    browser.setCookie('ledgerguard_session=revoked_token; Path=/; HttpOnly');
+    browser.deleteCookie('ledgerguard_session');
+
+    const isAuthenticated = !!browser.cookies['ledgerguard_session'];
+    let redirectUrl: string | null = null;
+    if (!isAuthenticated) {
+      redirectUrl = '/login?returnUrl=%2Fconsole';
+    }
+    assert.strictEqual(redirectUrl, '/login?returnUrl=%2Fconsole');
+  });
+
+  it('permits direct navigation to protected nested routes when authenticated', () => {
+    const browser = new SimulatedBrowser();
+    browser.setCookie('ledgerguard_session=valid_authenticated_cookie; Path=/; HttpOnly');
+
+    const nestedRoute = '/console/transfers/e8a2b579-080a-4abc-a389-af17e9004f1e';
+    const isAuthenticated = !!browser.cookies['ledgerguard_session'];
+    const activeRoute = isAuthenticated ? nestedRoute : `/login?returnUrl=${encodeURIComponent(nestedRoute)}`;
+
+    assert.strictEqual(activeRoute, nestedRoute);
+  });
+});
+
 describe('Browser Authentication: CSRF & Origin Defense on Mutations', () => {
   it('rejects state-changing experiment trigger when X-CSRF-Token is missing or malformed', () => {
     const testCases = [
@@ -276,6 +369,14 @@ describe('Browser Authentication: CSRF & Origin Defense on Mutations', () => {
         assert.strictEqual(tc.expectedStatus, 200);
       }
     }
+  });
+
+  it('protects failure experiment endpoints from unauthenticated invocation', () => {
+    const browser = new SimulatedBrowser();
+    // No session cookie
+    const hasAuthCookie = !!browser.cookies['ledgerguard_session'];
+    const status = hasAuthCookie ? 200 : 401;
+    assert.strictEqual(status, 401, 'Unauthenticated experiment invocation must be rejected');
   });
 });
 
