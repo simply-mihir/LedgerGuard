@@ -30,73 +30,97 @@ export const CLUSTER_NODES = [
   },
 ];
 
-export interface TCCStageDefinition {
-  stageNumber: number;
-  id: string;
-  title: string;
-  protocolEvent: string;
+export interface WorkflowEventDefinition {
+  eventType: string;
+  stageTitle: string;
+  phase: 'prepare' | 'decision' | 'confirm' | 'settlement' | 'cancel' | 'unknown';
   description: string;
-  phase: 'prepare' | 'decision' | 'confirm' | 'settlement';
 }
 
 /**
- * The 7 canonical stages of the LedgerGuard TCC Transfer Protocol.
+ * Authoritative set of real workflow event definitions emitted by LedgerGuard backend.
+ * Source: orchestrator.py, coordinator_service.py, and workflow_events audit table.
  */
-export const TCC_STAGES: TCCStageDefinition[] = [
-  {
-    stageNumber: 1,
-    id: 'intent_created',
-    title: 'Intent Created',
-    protocolEvent: 'transfer.intent.created',
-    description: 'Coordinator accepts request and writes transfer intent under idempotency lock.',
+export const WORKFLOW_EVENT_DEFINITIONS: Record<string, WorkflowEventDefinition> = {
+  PHASE_PREPARE_STARTED: {
+    eventType: 'PHASE_PREPARE_STARTED',
+    stageTitle: 'Phase 1: Prepare Phase Initiated',
     phase: 'prepare',
+    description: 'Coordinator begins Try phase: reserves balance on source ledger and verifies destination account viability.',
   },
-  {
-    stageNumber: 2,
-    id: 'source_reservation',
-    title: 'Source Reservation',
-    protocolEvent: 'participant.source.hold_reserved',
-    description: 'Source ledger isolates funds via balance hold in local ACID transaction.',
+  SOURCE_PREPARE_REJECTED: {
+    eventType: 'SOURCE_PREPARE_REJECTED',
+    stageTitle: 'Phase 1: Source Reservation Rejected',
     phase: 'prepare',
+    description: 'Source participant ledger rejected fund reservation due to insufficient available balance or account status.',
   },
-  {
-    stageNumber: 3,
-    id: 'destination_reservation',
-    title: 'Destination Reservation',
-    protocolEvent: 'participant.destination.intent_accepted',
-    description: 'Destination ledger validates recipient account status and registers incoming obligation.',
+  DESTINATION_PREPARE_REJECTED: {
+    eventType: 'DESTINATION_PREPARE_REJECTED',
+    stageTitle: 'Phase 1: Destination Validation Rejected',
     phase: 'prepare',
+    description: 'Destination participant ledger rejected transfer incoming intent obligation.',
   },
-  {
-    stageNumber: 4,
-    id: 'durable_decision',
-    title: 'Durable Decision Logged',
-    protocolEvent: 'coordinator.decision.committed',
-    description: 'Coordinator commits durable COMMIT decision under row lock. Irreversible recovery boundary.',
+  DECISION_MADE: {
+    eventType: 'DECISION_MADE',
+    stageTitle: 'Decision Point: Consensus Decision Logged',
     phase: 'decision',
+    description: 'Coordinator writes atomic, immutable COMMIT or CANCEL decision to transfer_decisions under row lock.',
   },
-  {
-    stageNumber: 5,
-    id: 'source_confirmation',
-    title: 'Source Confirmation',
-    protocolEvent: 'participant.source.settlement_posted',
-    description: 'Source ledger releases hold and posts immutable debit journal entry.',
+  DECISION_COMMITTED: {
+    eventType: 'DECISION_COMMITTED',
+    stageTitle: 'Decision Point: Committing State Acknowledged',
+    phase: 'decision',
+    description: 'Coordinator transitions transfer to COMMITTING state. Point of no return: rollback is prohibited.',
+  },
+  SOURCE_CONFIRMED: {
+    eventType: 'SOURCE_CONFIRMED',
+    stageTitle: 'Phase 2: Source Settlement Confirmed',
     phase: 'confirm',
+    description: 'Source ledger releases active balance hold and posts permanent debit journal entry in local ACID transaction.',
   },
-  {
-    stageNumber: 6,
-    id: 'destination_confirmation',
-    title: 'Destination Confirmation',
-    protocolEvent: 'participant.destination.settlement_posted',
-    description: 'Destination ledger posts immutable credit journal entry to recipient balance.',
+  DESTINATION_CONFIRMED: {
+    eventType: 'DESTINATION_CONFIRMED',
+    stageTitle: 'Phase 2: Destination Settlement Confirmed',
     phase: 'confirm',
+    description: 'Destination ledger posts permanent credit journal entry to recipient balance and clears incoming obligation.',
   },
-  {
-    stageNumber: 7,
-    id: 'settlement_resolved',
-    title: 'Settlement Complete',
-    protocolEvent: 'transfer.lifecycle.settled',
-    description: 'Both autonomous ledgers settled; inter-ledger clearing balances conserved.',
+  TRANSFER_SETTLED: {
+    eventType: 'TRANSFER_SETTLED',
+    stageTitle: 'Final Resolution: Transfer Settled',
     phase: 'settlement',
+    description: 'Coordinator confirms settlement across all participants; inter-ledger clearing balances conserved.',
   },
-];
+  SOURCE_CANCELLED: {
+    eventType: 'SOURCE_CANCELLED',
+    stageTitle: 'Phase 2: Source Reservation Cancelled',
+    phase: 'cancel',
+    description: 'Source ledger releases active hold back to available customer balance.',
+  },
+  DESTINATION_CANCELLED: {
+    eventType: 'DESTINATION_CANCELLED',
+    stageTitle: 'Phase 2: Destination Obligation Cancelled',
+    phase: 'cancel',
+    description: 'Destination ledger cancels incoming transfer intent and releases obligation.',
+  },
+  TRANSFER_CANCELLED: {
+    eventType: 'TRANSFER_CANCELLED',
+    stageTitle: 'Final Resolution: Transfer Cancelled',
+    phase: 'cancel',
+    description: 'Coordinator transitions transfer to terminal CANCELLED state.',
+  },
+};
+
+/**
+ * Return authoritative event metadata or a safe fallback for unknown event types.
+ */
+export function getWorkflowEventDefinition(eventType: string): WorkflowEventDefinition {
+  if (WORKFLOW_EVENT_DEFINITIONS[eventType]) {
+    return WORKFLOW_EVENT_DEFINITIONS[eventType];
+  }
+  return {
+    eventType,
+    stageTitle: eventType.replace(/_/g, ' '),
+    phase: 'unknown',
+    description: 'Recorded workflow audit trail event from coordinator execution log.',
+  };
+}

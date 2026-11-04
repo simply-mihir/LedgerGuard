@@ -202,10 +202,10 @@ export function TransferDetailSheet({
             }}
           >
             <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#f8fafc' }}>
-              Two-Phase Commit Protocol Trace
+              TCC Business Reservation Lifecycle Trace
             </span>
             <span className="font-mono" style={{ fontSize: '0.6875rem', color: '#38bdf8' }}>
-              7 Canonical TCC Stages
+              Workflow Audit Trail
             </span>
           </div>
 

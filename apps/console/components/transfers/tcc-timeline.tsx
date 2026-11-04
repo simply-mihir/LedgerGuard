@@ -1,8 +1,8 @@
 import React from 'react';
 import { TransferItem, WorkflowEvent } from '../../lib/types';
-import { TCC_STAGES } from '../../lib/constants';
+import { getWorkflowEventDefinition } from '../../lib/constants';
 import { Badge } from '../ui/badge';
-import { formatTime } from '../../lib/format';
+import { formatDateTime } from '../../lib/format';
 
 interface TccTimelineProps {
   transfer: TransferItem;
@@ -13,14 +13,14 @@ interface TccTimelineProps {
 export function TccTimeline({ transfer, events, isLoading = false }: TccTimelineProps) {
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem 0' }}>
-        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem 0' }}>
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div
             key={i}
             className="skeleton-shimmer"
             style={{
-              height: '56px',
-              borderRadius: '8px',
+              height: '72px',
+              borderRadius: '10px',
               backgroundColor: 'rgba(255, 255, 255, 0.04)',
             }}
           />
@@ -29,84 +29,296 @@ export function TccTimeline({ transfer, events, isLoading = false }: TccTimeline
     );
   }
 
-  // Map raw workflow events by matching event_type or ordering
+  // Ensure chronological ordering by recorded timestamp
+  const sortedEvents = [...events].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+
+  const isTerminal = transfer.state === 'SETTLED' || transfer.state === 'CANCELLED';
   const isSettled = transfer.state === 'SETTLED';
   const isCancelled = transfer.state === 'CANCELLED';
   const hasDecision = Boolean(transfer.decision);
 
-  // Helper to determine stage status
-  const getStageState = (index: number) => {
-    // Stage 1: Intent
-    if (index === 0) return { status: 'complete', color: '#0df2a6', label: 'COMPLETE' };
-
-    // Stage 2: Source prepare
-    if (index === 1) {
-      if (events.some((e) => e.event_type.includes('hold') || e.event_type.includes('prepare') || e.event_type.includes('source'))) {
-        return { status: 'complete', color: '#0df2a6', label: 'COMPLETE' };
-      }
-      return transfer.state === 'ACCEPTED' ? { status: 'active', color: '#f59e0b', label: 'ACTIVE' } : { status: 'complete', color: '#0df2a6', label: 'COMPLETE' };
-    }
-
-    // Stage 3: Destination prepare
-    if (index === 2) {
-      if (hasDecision || isSettled || isCancelled) return { status: 'complete', color: '#0df2a6', label: 'COMPLETE' };
-      if (transfer.state === 'PREPARING') return { status: 'active', color: '#f59e0b', label: 'ACTIVE' };
-      return { status: 'waiting', color: '#64748b', label: 'WAITING' };
-    }
-
-    // Stage 4: Durable Decision
-    if (index === 3) {
-      if (hasDecision) {
-        return transfer.decision === 'COMMIT'
-          ? { status: 'complete', color: '#0df2a6', label: 'COMMITTED' }
-          : { status: 'failed', color: '#f43f5e', label: 'CANCELLED' };
-      }
-      if (transfer.state === 'PREPARING') return { status: 'active', color: '#f59e0b', label: 'ACTIVE' };
-      return { status: 'waiting', color: '#64748b', label: 'WAITING' };
-    }
-
-    // Stage 5: Source confirm/cancel
-    if (index === 4) {
-      if (isSettled || isCancelled) return { status: 'complete', color: '#0df2a6', label: 'CONFIRMED' };
-      if (transfer.state === 'COMMITTING' || transfer.state === 'CANCELLING') return { status: 'active', color: '#f59e0b', label: 'ACTIVE' };
-      return { status: 'waiting', color: '#64748b', label: 'WAITING' };
-    }
-
-    // Stage 6: Destination confirm/cancel
-    if (index === 5) {
-      if (isSettled || isCancelled) return { status: 'complete', color: '#0df2a6', label: 'CONFIRMED' };
-      if (transfer.state === 'COMMITTING') return { status: 'active', color: '#f59e0b', label: 'ACTIVE' };
-      return { status: 'waiting', color: '#64748b', label: 'WAITING' };
-    }
-
-    // Stage 7: Settlement resolved
-    if (index === 6) {
-      if (isSettled) return { status: 'complete', color: '#0df2a6', label: 'SETTLED' };
-      if (isCancelled) return { status: 'failed', color: '#f43f5e', label: 'CANCELLED' };
-      return { status: 'waiting', color: '#64748b', label: 'WAITING' };
-    }
-
-    return { status: 'waiting', color: '#64748b', label: 'WAITING' };
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', position: 'relative' }}>
-      {TCC_STAGES.map((stage, idx) => {
-        const stateInfo = getStageState(idx);
-        const matchingEvent = events[idx] || null;
-        const isLast = idx === TCC_STAGES.length - 1;
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* High-Level TCC Business Lifecycle Progression Bar */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '0.5rem',
+          padding: '0.75rem',
+          borderRadius: '10px',
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.06)',
+        }}
+      >
+        {/* Phase 1: Try */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '0.625rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+            1. Try (Prepare)
+          </div>
+          <div style={{ marginTop: '0.25rem' }}>
+            <Badge
+              size="sm"
+              variant={
+                hasDecision || isTerminal
+                  ? 'mint'
+                  : transfer.state === 'PREPARING'
+                  ? 'amber'
+                  : 'neutral'
+              }
+            >
+              {hasDecision || isTerminal ? 'COMPLETED' : transfer.state === 'PREPARING' ? 'ACTIVE' : 'WAITING'}
+            </Badge>
+          </div>
+        </div>
 
-        return (
+        {/* Phase 2: Decision */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '0.625rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+            2. Decision
+          </div>
+          <div style={{ marginTop: '0.25rem' }}>
+            <Badge
+              size="sm"
+              variant={
+                transfer.decision === 'COMMIT'
+                  ? 'mint'
+                  : transfer.decision === 'CANCEL'
+                  ? 'rose'
+                  : transfer.state === 'PREPARING'
+                  ? 'amber'
+                  : 'neutral'
+              }
+            >
+              {transfer.decision ? transfer.decision : 'PENDING'}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Phase 3: Confirm / Cancel */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '0.625rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+            3. {transfer.decision === 'CANCEL' ? 'Cancel' : 'Confirm'}
+          </div>
+          <div style={{ marginTop: '0.25rem' }}>
+            <Badge
+              size="sm"
+              variant={
+                isTerminal
+                  ? isSettled
+                    ? 'mint'
+                    : 'rose'
+                  : transfer.state === 'COMMITTING' || transfer.state === 'CANCELLING'
+                  ? 'amber'
+                  : 'neutral'
+              }
+            >
+              {isTerminal
+                ? 'APPLIED'
+                : transfer.state === 'COMMITTING' || transfer.state === 'CANCELLING'
+                ? 'DISPATCHING'
+                : 'WAITING'}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Phase 4: Resolution */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '0.625rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+            4. Resolution
+          </div>
+          <div style={{ marginTop: '0.25rem' }}>
+            <Badge
+              size="sm"
+              variant={isSettled ? 'mint' : isCancelled ? 'rose' : 'neutral'}
+            >
+              {transfer.state}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Recorded Workflow Events Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#f8fafc' }}>
+          Recorded Workflow Audit Events
+        </span>
+        <span className="font-mono" style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>
+          {sortedEvents.length} Recorded in DB
+        </span>
+      </div>
+
+      {/* Empty State */}
+      {sortedEvents.length === 0 && (
+        <div
+          style={{
+            padding: '2rem 1rem',
+            textAlign: 'center',
+            borderRadius: '10px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            color: '#94a3b8',
+            fontSize: '0.8125rem',
+          }}
+        >
+          No workflow events recorded in coordinator database yet.
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+            Transfer is in {transfer.state} state awaiting orchestrator worker pickup.
+          </div>
+        </div>
+      )}
+
+      {/* Chronological Event Timeline */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', position: 'relative' }}>
+        {sortedEvents.map((event, idx) => {
+          const meta = getWorkflowEventDefinition(event.event_type);
+          const isLast = idx === sortedEvents.length - 1 && isTerminal;
+          const isError =
+            event.event_type.includes('REJECTED') ||
+            event.event_type.includes('CANCEL') ||
+            (event.details && (event.details.decision === 'CANCEL' || event.details.status === 'CANCELLED'));
+
+          return (
+            <div
+              key={event.event_id || `${event.event_type}-${idx}`}
+              style={{
+                display: 'flex',
+                gap: '1rem',
+                position: 'relative',
+                animation: `fade-in 0.25s ease ${idx * 0.03}s both`,
+              }}
+            >
+              {/* Left track line & indicator */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  width: '28px',
+                  flexShrink: 0,
+                }}
+              >
+                {/* Node icon */}
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: isError
+                      ? 'rgba(244, 63, 94, 0.15)'
+                      : 'rgba(13, 242, 166, 0.15)',
+                    border: `2px solid ${isError ? '#f43f5e' : '#0df2a6'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isError ? '#f43f5e' : '#0df2a6',
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    zIndex: 2,
+                  }}
+                >
+                  {isError ? '✕' : '✓'}
+                </div>
+
+                {/* Connecting Line */}
+                {(!isLast || !isTerminal) && (
+                  <div
+                    style={{
+                      width: '2px',
+                      flex: 1,
+                      minHeight: '28px',
+                      backgroundColor: 'rgba(13, 242, 166, 0.25)',
+                      margin: '3px 0',
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Event Content Card */}
+              <div
+                style={{
+                  flex: 1,
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '10px',
+                  padding: '0.75rem 1rem',
+                  marginBottom: isLast ? 0 : '0.5rem',
+                }}
+              >
+                {/* Header: Stage title + Recorded badge + Timestamp */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#f8fafc' }}>
+                      {meta.stageTitle}
+                    </span>
+                    <Badge
+                      size="sm"
+                      variant={isError ? 'rose' : 'mint'}
+                    >
+                      RECORDED
+                    </Badge>
+                  </div>
+
+                  <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                    {formatDateTime(event.created_at)}
+                  </span>
+                </div>
+
+                {/* Exact Backend Event Name in Monospace */}
+                <div
+                  className="font-mono"
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: isError ? '#fb7185' : '#38bdf8',
+                    marginBottom: '0.25rem',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {event.event_type}
+                </div>
+
+                {/* Conceptual Description */}
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                  {meta.description}
+                </div>
+
+                {/* Granular Recorded Event Details */}
+                {event.details && Object.keys(event.details).length > 0 && (
+                  <div
+                    className="font-mono"
+                    style={{
+                      marginTop: '0.5rem',
+                      padding: '0.4rem 0.6rem',
+                      borderRadius: '6px',
+                      background: 'rgba(0, 0, 0, 0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.04)',
+                      fontSize: '0.6875rem',
+                      color: '#cbd5e1',
+                    }}
+                  >
+                    {Object.entries(event.details)
+                      .map(([k, v]) => `${k}: ${String(v)}`)
+                      .join('  •  ')}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Active In-Flight Waiting Stage Indicator */}
+        {!isTerminal && (
           <div
-            key={stage.id}
             style={{
               display: 'flex',
               gap: '1rem',
               position: 'relative',
-              animation: `fade-in 0.25s ease ${idx * 0.04}s both`,
+              animation: 'fade-in 0.3s ease both',
             }}
           >
-            {/* Left track line & indicator */}
             <div
               style={{
                 display: 'flex',
@@ -116,129 +328,50 @@ export function TccTimeline({ transfer, events, isLoading = false }: TccTimeline
                 flexShrink: 0,
               }}
             >
-              {/* Stage Node Icon */}
               <div
                 style={{
                   width: '24px',
                   height: '24px',
                   borderRadius: '50%',
-                  background:
-                    stateInfo.status === 'complete'
-                      ? 'rgba(13, 242, 166, 0.15)'
-                      : stateInfo.status === 'active'
-                      ? 'rgba(245, 158, 11, 0.15)'
-                      : stateInfo.status === 'failed'
-                      ? 'rgba(244, 63, 94, 0.15)'
-                      : 'rgba(255, 255, 255, 0.04)',
-                  border: `2px solid ${stateInfo.color}`,
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '2px solid #f59e0b',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: stateInfo.color,
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
                   zIndex: 2,
                 }}
               >
-                {stateInfo.status === 'complete' ? (
-                  '✓'
-                ) : stateInfo.status === 'active' ? (
-                  <span className="signal-pulse-ring" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: stateInfo.color }} />
-                ) : stateInfo.status === 'failed' ? (
-                  '✕'
-                ) : (
-                  idx + 1
-                )}
-              </div>
-
-              {/* Connecting Track Line */}
-              {!isLast && (
-                <div
-                  style={{
-                    width: '2px',
-                    flex: 1,
-                    minHeight: '34px',
-                    backgroundColor: stateInfo.status === 'complete' ? 'rgba(13, 242, 166, 0.25)' : 'rgba(255, 255, 255, 0.06)',
-                    margin: '3px 0',
-                  }}
+                <span
+                  className="signal-pulse-ring"
+                  style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }}
                 />
-              )}
+              </div>
             </div>
 
-            {/* Stage Content Card */}
             <div
               style={{
                 flex: 1,
-                background: stateInfo.status === 'active' ? 'rgba(245, 158, 11, 0.05)' : 'rgba(255, 255, 255, 0.02)',
-                border: `1px solid ${
-                  stateInfo.status === 'active'
-                    ? 'rgba(245, 158, 11, 0.25)'
-                    : 'rgba(255, 255, 255, 0.06)'
-                }`,
+                background: 'rgba(245, 158, 11, 0.04)',
+                border: '1px dashed rgba(245, 158, 11, 0.3)',
                 borderRadius: '10px',
                 padding: '0.75rem 1rem',
-                marginBottom: isLast ? 0 : '0.5rem',
               }}
             >
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#f8fafc' }}>
-                    {stage.title}
-                  </span>
-                  <Badge
-                    size="sm"
-                    variant={
-                      stateInfo.status === 'complete'
-                        ? 'mint'
-                        : stateInfo.status === 'active'
-                        ? 'amber'
-                        : stateInfo.status === 'failed'
-                        ? 'rose'
-                        : 'neutral'
-                    }
-                  >
-                    {stateInfo.label}
-                  </Badge>
-                </div>
-
-                <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>
-                  {matchingEvent ? formatTime(matchingEvent.created_at) : '—'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#f8fafc' }}>
+                  Next Stage Pending
                 </span>
+                <Badge size="sm" variant="amber">
+                  IN FLIGHT
+                </Badge>
               </div>
-
-              {/* Protocol Event in Monospace */}
-              <div className="font-mono" style={{ fontSize: '0.6875rem', color: '#38bdf8', marginBottom: '0.25rem' }}>
-                {stage.protocolEvent}
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                Transfer state: <span className="font-mono" style={{ color: '#f59e0b' }}>{transfer.state}</span>. Awaiting participant response or autonomous worker completion.
               </div>
-
-              {/* Description */}
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
-                {stage.description}
-              </div>
-
-              {/* Matching Event granular details if available */}
-              {matchingEvent && matchingEvent.details && Object.keys(matchingEvent.details).length > 0 && (
-                <div
-                  className="font-mono"
-                  style={{
-                    marginTop: '0.45rem',
-                    padding: '0.35rem 0.55rem',
-                    borderRadius: '6px',
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    fontSize: '0.6875rem',
-                    color: '#cbd5e1',
-                  }}
-                >
-                  {Object.entries(matchingEvent.details)
-                    .map(([k, v]) => `${k}: ${v}`)
-                    .join('  •  ')}
-                </div>
-              )}
             </div>
           </div>
-        );
-      })}
+        )}
+      </div>
     </div>
   );
 }

@@ -120,7 +120,7 @@ export function ClusterTopologyCard({ reachability }: ClusterTopologyCardProps) 
           }}
         >
           <span>TCC Protocol Transport: Local PostgreSQL Row Locks & Durable Outbox/Inbox</span>
-          <span className="font-mono" style={{ color: '#38bdf8' }}>No Distributed XA 2PC Locks</span>
+          <span className="font-mono" style={{ color: '#38bdf8' }}>No Distributed XA / Database 2PC Locks</span>
         </div>
       </CardContent>
     </Card>
