@@ -61,16 +61,25 @@ export async function getTransfers(limit: number = 50): Promise<TransferItem[]> 
  */
 export async function getAccountStatement(
   accountId: string,
-  limit: number = 20
-): Promise<StatementEntry[]> {
-  const res = await fetch(`/api/accounts/${accountId}/statement?limit=${limit}`, {
+  limit: number = 20,
+  cursor?: number
+): Promise<{ account_id: string; entries: StatementEntry[]; next_cursor: number | null }> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor !== undefined && cursor !== null) {
+    query.set('cursor', String(cursor));
+  }
+  const res = await fetch(`/api/accounts/${accountId}/statement?${query.toString()}`, {
     cache: 'no-store',
   });
   if (!res.ok) {
     throw new ApiError(`Failed to fetch statement for account ${accountId}`, res.status);
   }
   const data = await res.json();
-  return data.entries || [];
+  return {
+    account_id: data.account_id,
+    entries: data.entries || [],
+    next_cursor: data.next_cursor ?? null,
+  };
 }
 
 /**
@@ -87,12 +96,10 @@ export async function getTransferTimeline(transferId: string): Promise<WorkflowE
 }
 
 /**
- * Execute an on-demand multi-ledger reconciliation audit.
+ * Execute an on-demand double-entry reconciliation audit.
+ * Returns exact fields from ReconciliationRunResponse without synthetic fields.
  */
-export async function executeReconciliation(
-  transfersCount: number = 0,
-  clearingSum: number = 0
-): Promise<ReconciliationReport> {
+export async function executeReconciliation(): Promise<ReconciliationReport> {
   const res = await fetch('/api/admin/reconciliation-runs', {
     method: 'POST',
     headers: {
@@ -111,18 +118,17 @@ export async function executeReconciliation(
 
   const data = await res.json();
   return {
+    run_id: data.run_id,
     run_at: data.run_at,
     status: data.status,
-    coverage: 'FULL',
-    reachable_ledgers: ['coordinator', 'ledger-1', 'ledger-2'],
-    unreachable_ledgers: [],
-    transfers_examined: transfersCount,
-    clearing_balance_sum: clearingSum,
-    in_flight_clearing_amount: 0,
+    accounts_examined: data.accounts_examined,
+    journals_examined: data.journals_examined,
+    lines_examined: data.lines_examined,
+    trial_balance_debit: data.trial_balance_debit,
+    trial_balance_credit: data.trial_balance_credit,
     findings: (data.findings || []).map((f: any) => ({
       check_name: f.check_name,
       severity: f.severity,
-      ledger_id: 'LOCAL',
       resource_id: f.resource_id,
       details: f.details,
     })),

@@ -11,6 +11,9 @@ interface AccountDetailSheetProps {
   onClose: () => void;
   statementEntries: StatementEntry[];
   isLoadingStatement?: boolean;
+  nextCursor?: number | null;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 export function AccountDetailSheet({
@@ -18,6 +21,9 @@ export function AccountDetailSheet({
   onClose,
   statementEntries,
   isLoadingStatement = false,
+  nextCursor = null,
+  onLoadMore,
+  isLoadingMore = false,
 }: AccountDetailSheetProps) {
   if (!account) return null;
 
@@ -173,6 +179,30 @@ export function AccountDetailSheet({
           </div>
 
           <StatementTable entries={statementEntries} isLoading={isLoadingStatement} />
+
+          {nextCursor !== null && nextCursor !== undefined && onLoadMore && (
+            <div style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: '#f8fafc',
+                  borderRadius: '8px',
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: isLoadingMore ? 'not-allowed' : 'pointer',
+                  opacity: isLoadingMore ? 0.6 : 1,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {isLoadingMore ? 'Loading next page...' : `Load more entries (Cursor: ${nextCursor})`}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </Sheet>

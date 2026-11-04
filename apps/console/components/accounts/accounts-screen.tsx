@@ -14,6 +14,9 @@ interface AccountsScreenProps {
   onSelectAccount: (account: AccountItem | null) => void;
   statementEntries: StatementEntry[];
   isLoadingStatement?: boolean;
+  nextCursor?: number | null;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 export function AccountsScreen({
@@ -24,6 +27,9 @@ export function AccountsScreen({
   onSelectAccount,
   statementEntries,
   isLoadingStatement = false,
+  nextCursor = null,
+  onLoadMore,
+  isLoadingMore = false,
 }: AccountsScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [ledgerFilter, setLedgerFilter] = useState<'all' | 'ledger-1' | 'ledger-2'>('all');
@@ -222,6 +228,9 @@ export function AccountsScreen({
         onClose={() => onSelectAccount(null)}
         statementEntries={statementEntries}
         isLoadingStatement={isLoadingStatement}
+        nextCursor={nextCursor}
+        onLoadMore={onLoadMore}
+        isLoadingMore={isLoadingMore}
       />
     </div>
   );

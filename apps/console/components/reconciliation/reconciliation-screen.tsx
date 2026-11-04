@@ -1,21 +1,27 @@
-import React from 'react';
-import { ReconciliationReport } from '../../lib/types';
+import { OverviewData, ReconciliationReport } from '../../lib/types';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { formatINR } from '../../lib/format';
 import { AuditSummaryCard } from './audit-summary-card';
 import { FindingsTable } from './findings-table';
 
 interface ReconciliationScreenProps {
   report: ReconciliationReport | null;
+  overview?: OverviewData | null;
   onRunAudit: () => void;
   isReconciling: boolean;
 }
 
 export function ReconciliationScreen({
   report,
+  overview,
   onRunAudit,
   isReconciling,
 }: ReconciliationScreenProps) {
+  const reachableCount = Object.values(overview?.reachability || {}).filter(Boolean).length;
+  const totalNodes = Object.keys(overview?.reachability || {}).length || 3;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
       {/* Top Action Bar */}
@@ -34,8 +40,8 @@ export function ReconciliationScreen({
               Multi-Database Double-Entry Audit Engine
             </h2>
             <p style={{ fontSize: '0.8125rem', color: '#94a3b8', marginTop: '0.25rem', maxWidth: '640px', lineHeight: 1.5 }}>
-              Executes cross-database consistency checks verifying that all journals balance, wallet caches match posted lines,
-              and inter-ledger clearing balances sum to zero across autonomous participant instances.
+              Executes local double-entry reconciliation verifying that all journals balance, wallet caches match posted lines,
+              and trial balance debits equal credits across accounts.
             </p>
           </div>
 
@@ -55,6 +61,30 @@ export function ReconciliationScreen({
           </Button>
         </div>
       </Card>
+
+      {/* Distributed Platform Telemetry Banner */}
+      {overview && (
+        <Card style={{ padding: '1.15rem 1.5rem', background: 'rgba(255, 255, 255, 0.02)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <span style={{ fontSize: '0.6875rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+                Platform Telemetry (From Coordinator Overview Directory)
+              </span>
+              <div style={{ fontSize: '0.875rem', color: '#f8fafc', fontWeight: 600, marginTop: '0.2rem' }}>
+                Inter-Ledger Net Clearing Sum: <span className="font-mono" style={{ color: overview.clearing_sum === 0 ? '#0df2a6' : '#fb7185' }}>{formatINR(overview.clearing_sum)}</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                Reachable Participant Nodes:
+              </span>
+              <Badge variant="blue" size="sm">
+                {reachableCount}/{totalNodes} Active
+              </Badge>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Audit Report View */}
       {report ? (

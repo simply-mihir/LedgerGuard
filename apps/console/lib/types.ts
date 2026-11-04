@@ -73,21 +73,26 @@ export interface WorkflowEvent {
 export interface ReconciliationFinding {
   check_name: string;
   severity: string;
-  ledger_id: string;
   resource_id: string;
   details: string;
 }
 
 export interface ReconciliationReport {
+  run_id: string;
   run_at: string;
   status: string;
-  coverage: string;
-  reachable_ledgers: string[];
-  unreachable_ledgers: string[];
-  transfers_examined: number;
-  clearing_balance_sum: number;
-  in_flight_clearing_amount: number;
+  accounts_examined: number;
+  journals_examined: number;
+  lines_examined: number;
+  trial_balance_debit: number;
+  trial_balance_credit: number;
   findings: ReconciliationFinding[];
+}
+
+export interface StatementResponseData {
+  account_id: string;
+  entries: StatementEntry[];
+  next_cursor: number | null;
 }
 
 export interface ExperimentStep {

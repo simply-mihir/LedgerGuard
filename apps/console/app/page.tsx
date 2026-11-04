@@ -41,7 +41,9 @@ export default function OperatorConsole() {
   // Selection & Detail Workspaces
   const [selectedAccount, setSelectedAccount] = useState<AccountItem | null>(null);
   const [statementEntries, setStatementEntries] = useState<StatementEntry[]>([]);
+  const [statementNextCursor, setStatementNextCursor] = useState<number | null>(null);
   const [isLoadingStatement, setIsLoadingStatement] = useState<boolean>(false);
+  const [isLoadingMoreStatement, setIsLoadingMoreStatement] = useState<boolean>(false);
 
   const [selectedTransfer, setSelectedTransfer] = useState<TransferItem | null>(null);
   const [transferTimeline, setTransferTimeline] = useState<WorkflowEvent[]>([]);
@@ -97,18 +99,39 @@ export default function OperatorConsole() {
     return () => clearInterval(interval);
   }, [refreshAll, pollOverview]);
 
-  // Handle statement inspection
+  // Handle statement inspection with cursor pagination
   const handleOpenStatement = async (account: AccountItem) => {
     setSelectedAccount(account);
     setIsLoadingStatement(true);
+    setStatementNextCursor(null);
     try {
-      const entries = await getAccountStatement(account.account_id, 20);
-      setStatementEntries(entries);
+      const data = await getAccountStatement(account.account_id, 20);
+      setStatementEntries(data.entries);
+      setStatementNextCursor(data.next_cursor);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to retrieve account statement.');
       setStatementEntries([]);
+      setStatementNextCursor(null);
     } finally {
       setIsLoadingStatement(false);
+    }
+  };
+
+  const handleLoadMoreStatement = async () => {
+    if (!selectedAccount || statementNextCursor === null) return;
+    setIsLoadingMoreStatement(true);
+    try {
+      const data = await getAccountStatement(
+        selectedAccount.account_id,
+        20,
+        statementNextCursor
+      );
+      setStatementEntries((prev) => [...prev, ...data.entries]);
+      setStatementNextCursor(data.next_cursor);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to load additional statement entries.');
+    } finally {
+      setIsLoadingMoreStatement(false);
     }
   };
 
@@ -132,7 +155,7 @@ export default function OperatorConsole() {
     setIsReconciling(true);
     setErrorMsg(null);
     try {
-      const report = await executeReconciliation(transfers.length, overview?.clearing_sum ?? 0);
+      const report = await executeReconciliation();
       setReconciliationReport(report);
       // Refresh overview to update reconciliation badge
       await pollOverview();
@@ -199,10 +222,15 @@ export default function OperatorConsole() {
               handleOpenStatement(acct);
             } else {
               setSelectedAccount(null);
+              setStatementEntries([]);
+              setStatementNextCursor(null);
             }
           }}
           statementEntries={statementEntries}
           isLoadingStatement={isLoadingStatement}
+          nextCursor={statementNextCursor}
+          onLoadMore={handleLoadMoreStatement}
+          isLoadingMore={isLoadingMoreStatement}
         />
       )}
 
@@ -229,6 +257,7 @@ export default function OperatorConsole() {
       {activeTab === 'reconciliation' && (
         <ReconciliationScreen
           report={reconciliationReport}
+          overview={overview}
           onRunAudit={handleRunReconciliation}
           isReconciling={isReconciling}
         />
