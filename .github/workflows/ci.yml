@@ -118,5 +118,6 @@ jobs:
           cd apps/console
           npm ci
           npm run lint
+          npm test
           npm run build
           npm audit --omit=dev

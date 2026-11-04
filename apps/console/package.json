@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3300",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test test/workflow-events.test.ts"
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "next": "15.5.28",
@@ -20,6 +20,7 @@
     "@types/react-dom": "^18.3.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "15.5.28",
+    "tsx": "^4.23.15",
     "typescript": "^5.4.5"
   },
   "overrides": {
