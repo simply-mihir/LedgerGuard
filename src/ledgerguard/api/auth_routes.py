@@ -32,14 +32,37 @@ from ledgerguard.config import settings
 auth_router = APIRouter(prefix="/v1/auth", tags=["Operator Authentication"])
 
 
+def is_cookie_secure(request: Request | None = None) -> bool:
+    """Determine whether the session cookie must have the Secure flag.
+
+    1. Explicit configuration (LEDGERGUARD_COOKIE_SECURE=true/false) always takes precedence.
+    2. Outside local/test environments (e.g. production), Secure is ALWAYS True.
+    3. In local/test environments:
+       - Direct HTTPS request -> True.
+       - X-Forwarded-Proto is only trusted if the immediate client is in LEDGERGUARD_TRUSTED_PROXIES.
+       - Direct local HTTP development defaults to False.
+    """
+    if settings.cookie_secure is not None:
+        return settings.cookie_secure
+
+    if settings.env not in ("local", "test"):
+        return True
+
+    if request:
+        if request.url.scheme == "https":
+            return True
+        client_host = request.client.host if request.client else None
+        if client_host and client_host in settings.get_trusted_proxies():
+            proto = request.headers.get("x-forwarded-proto", "").lower()
+            if proto == "https":
+                return True
+
+    return False
+
+
 def _set_session_cookie(response: Response, raw_token: str, request: Request | None = None) -> None:
     """Attach the server session identifier in a secure, HttpOnly, SameSite cookie."""
-    is_secure = False
-    if request:
-        proto = request.headers.get("x-forwarded-proto", "").lower()
-        is_secure = (proto == "https") or (request.url.scheme == "https")
-    if not is_secure and settings.env not in ("local", "test"):
-        is_secure = True
+    is_secure = is_cookie_secure(request)
 
     response.set_cookie(
         key=COOKIE_SESSION_NAME,

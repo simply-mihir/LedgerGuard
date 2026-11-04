@@ -62,17 +62,12 @@ def verify_csrf_token(
     """Enforce CSRF token and Origin verification on state-changing requests authenticated via session cookie."""
     if getattr(request.state, "auth_type", None) == "cookie":
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-            # 1. Validate Origin header if present
+            # 1. Validate complete Origin (scheme, host, port) if present
             origin = request.headers.get("origin")
             if origin:
-                request_host = request.headers.get("host", "").split(":")[0]
-                trusted_hosts = {"localhost", "127.0.0.1", "testserver"}
-                if request_host:
-                    trusted_hosts.add(request_host)
-                from urllib.parse import urlparse
-                parsed = urlparse(origin)
-                origin_host = parsed.hostname
-                if origin_host not in trusted_hosts:
+                from ledgerguard.auth.origins import is_origin_allowed
+
+                if not is_origin_allowed(origin, settings.get_trusted_origins()):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Cross-origin state-changing request rejected.",

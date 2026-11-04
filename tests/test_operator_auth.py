@@ -303,6 +303,71 @@ def test_csrf_protection_and_origin_validation(test_operator):
     assert good_csrf_resp.status_code == 200
 
 
+def test_cookie_security_and_proxy_boundary(monkeypatch):
+    """Verify cookie security policy: direct local HTTP, production Secure enforcement, and spoofed proxy protection."""
+    from starlette.requests import Request
+    from ledgerguard.api.auth_routes import is_cookie_secure
+
+    # 1. Direct local development over HTTP -> Secure is False
+    req_local = Request({"type": "http", "scheme": "http", "path": "/", "server": ("localhost", 80), "client": ("127.0.0.1", 12345), "headers": []})
+    monkeypatch.setattr(settings, "env", "local")
+    monkeypatch.setattr(settings, "cookie_secure", None)
+    assert is_cookie_secure(req_local) is False
+
+    # 2. Spoofed X-Forwarded-Proto from untrusted remote client -> Ignored, Secure remains False
+    req_spoofed = Request({
+        "type": "http",
+        "scheme": "http",
+        "path": "/",
+        "server": ("localhost", 80),
+        "client": ("198.51.100.1", 54321),
+        "headers": [(b"x-forwarded-proto", b"https")],
+    })
+    assert is_cookie_secure(req_spoofed) is False
+
+    # 3. Legitimate X-Forwarded-Proto from trusted local proxy (127.0.0.1) -> Secure is True
+    req_trusted_proxy = Request({
+        "type": "http",
+        "scheme": "http",
+        "path": "/",
+        "server": ("localhost", 80),
+        "client": ("127.0.0.1", 8080),
+        "headers": [(b"x-forwarded-proto", b"https")],
+    })
+    assert is_cookie_secure(req_trusted_proxy) is True
+
+    # 4. Production environment: Secure is ALWAYS True, even if client sends x-forwarded-proto: http
+    monkeypatch.setattr(settings, "env", "production")
+    req_prod_downgrade_attempt = Request({
+        "type": "http",
+        "scheme": "http",
+        "path": "/",
+        "server": ("localhost", 80),
+        "client": ("127.0.0.1", 8080),
+        "headers": [(b"x-forwarded-proto", b"http")],
+    })
+    assert is_cookie_secure(req_prod_downgrade_attempt) is True
+
+
+def test_configured_trusted_origins_production_style(monkeypatch, test_operator):
+    """Verify environment-configured complete origins: matching scheme, host, and port."""
+    from ledgerguard.auth.origins import is_origin_allowed
+
+    trusted = ["https://console.ledgerguard.internal", "https://admin.ledgerguard.internal:8443"]
+
+    # Allowed exact origin matches
+    assert is_origin_allowed("https://console.ledgerguard.internal", trusted) is True
+    assert is_origin_allowed("https://console.ledgerguard.internal:443", trusted) is True  # Equivalent default port
+    assert is_origin_allowed("https://admin.ledgerguard.internal:8443", trusted) is True
+
+    # Rejected foreign, scheme-mismatched, or port-mismatched origins
+    assert is_origin_allowed("https://evil-attacker.com", trusted) is False
+    assert is_origin_allowed("http://console.ledgerguard.internal", trusted) is False       # Scheme mismatch
+    assert is_origin_allowed("https://console.ledgerguard.internal:8443", trusted) is False # Port mismatch
+    assert is_origin_allowed("javascript:void(0)", trusted) is False                        # Malformed
+    assert is_origin_allowed("null", trusted) is False                                      # Sandboxed null origin
+
+
 @pytest.mark.integration
 def test_totp_mfa_full_lifecycle_and_replay_rejection(mfa_operator):
     """Verify end-to-end two-factor flow and strict TOTP replay rejection within same time step."""

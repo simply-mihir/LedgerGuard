@@ -27,16 +27,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    trusted_origins = [
-        "http://localhost:3300",
-        "http://127.0.0.1:3300",
-        "http://localhost:8010",
-        "http://127.0.0.1:8010",
-    ]
+    from ledgerguard.config import settings
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=trusted_origins,
+        allow_origins=settings.get_trusted_origins(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
