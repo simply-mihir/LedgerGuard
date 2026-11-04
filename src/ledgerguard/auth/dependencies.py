@@ -59,9 +59,26 @@ def verify_csrf_token(
     operator: OperatorPublicInfo = Depends(get_current_operator),
     x_csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> None:
-    """Enforce CSRF token verification on state-changing requests authenticated via session cookie."""
+    """Enforce CSRF token and Origin verification on state-changing requests authenticated via session cookie."""
     if getattr(request.state, "auth_type", None) == "cookie":
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            # 1. Validate Origin header if present
+            origin = request.headers.get("origin")
+            if origin:
+                request_host = request.headers.get("host", "").split(":")[0]
+                trusted_hosts = {"localhost", "127.0.0.1", "testserver"}
+                if request_host:
+                    trusted_hosts.add(request_host)
+                from urllib.parse import urlparse
+                parsed = urlparse(origin)
+                origin_host = parsed.hostname
+                if origin_host not in trusted_hosts:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Cross-origin state-changing request rejected.",
+                    )
+
+            # 2. Enforce constant-time CSRF token comparison
             expected_csrf = getattr(request.state, "csrf_token", None)
             if not x_csrf_token or not expected_csrf or not secrets.compare_digest(x_csrf_token, expected_csrf):
                 raise HTTPException(

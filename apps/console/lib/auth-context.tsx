@@ -99,7 +99,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      const headers: Record<string, string> = {};
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+      await fetch('/api/auth/logout', { method: 'POST', headers });
     } catch {
       // Ignore network errors on logout
     }

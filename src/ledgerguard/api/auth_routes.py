@@ -1,6 +1,8 @@
 """FastAPI routes for operator authentication, session management, and multi-factor setup."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+import secrets
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
 from ledgerguard.auth.dependencies import (
     COOKIE_SESSION_NAME,
@@ -29,16 +31,22 @@ from ledgerguard.config import settings
 auth_router = APIRouter(prefix="/v1/auth", tags=["Operator Authentication"])
 
 
-def _set_session_cookie(response: Response, session_id: str) -> None:
+def _set_session_cookie(response: Response, raw_token: str, request: Request | None = None) -> None:
     """Attach the server session identifier in a secure, HttpOnly, SameSite cookie."""
-    is_secure = settings.env != "local"
+    is_secure = False
+    if request:
+        proto = request.headers.get("x-forwarded-proto", "").lower()
+        is_secure = (proto == "https") or (request.url.scheme == "https")
+    if not is_secure and settings.env not in ("local", "test"):
+        is_secure = True
+
     response.set_cookie(
         key=COOKIE_SESSION_NAME,
-        value=session_id,
+        value=raw_token,
         httponly=True,
         secure=is_secure,
         samesite="lax",
-        max_age=43200,  # 12 hours
+        max_age=43200,  # 12 hours absolute
         path="/",
     )
 
@@ -64,17 +72,20 @@ def login(
     """Verify operator credentials.
 
     If MFA is enabled, returns temporary token for TOTP verification step.
-    If MFA is disabled, provisions a server session and sets HttpOnly cookie.
+    If MFA is disabled, provisions a server session with SHA-256 hash and sets HttpOnly cookie.
+    Rotates session if an existing session was present.
     """
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
+    old_session = request.cookies.get(COOKIE_SESSION_NAME)
 
     try:
-        login_resp, session_id, _ = authenticate_operator(
+        login_resp, raw_session_token, _ = authenticate_operator(
             identifier=req.identifier,
             password=req.password,
             ip_address=ip_address,
             user_agent=user_agent,
+            old_raw_token=old_session,
         )
     except AuthenticationError as exc:
         raise HTTPException(
@@ -82,8 +93,8 @@ def login(
             detail=exc.message,
         ) from exc
 
-    if session_id:
-        _set_session_cookie(response, session_id)
+    if raw_session_token:
+        _set_session_cookie(response, raw_session_token, request=request)
 
     return login_resp
 
@@ -98,16 +109,18 @@ def mfa_verify(
     request: Request,
     response: Response,
 ) -> OperatorLoginResponse:
-    """Verify 6-digit TOTP verification code from authenticator app."""
+    """Verify 6-digit TOTP verification code from authenticator app with replay protection."""
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
+    old_session = request.cookies.get(COOKIE_SESSION_NAME)
 
     try:
-        login_resp, session_id, _ = verify_mfa_login(
+        login_resp, raw_session_token, _ = verify_mfa_login(
             temp_token=req.temp_token,
             code=req.code,
             ip_address=ip_address,
             user_agent=user_agent,
+            old_raw_token=old_session,
         )
     except AuthenticationError as exc:
         raise HTTPException(
@@ -115,7 +128,7 @@ def mfa_verify(
             detail=exc.message,
         ) from exc
 
-    _set_session_cookie(response, session_id)
+    _set_session_cookie(response, raw_session_token, request=request)
     return login_resp
 
 
@@ -145,11 +158,26 @@ def get_session(request: Request) -> OperatorSessionResponse:
     "/logout",
     summary="Revoke active operator session",
 )
-def logout(request: Request, response: Response) -> dict[str, str]:
-    """Revoke operator session in database and delete browser cookie."""
+def logout(
+    request: Request,
+    response: Response,
+    x_csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict[str, str]:
+    """Revoke operator session in database and delete browser cookie.
+
+    Enforces CSRF protection on logout when authenticated via session cookie.
+    """
     session_cookie = request.cookies.get(COOKIE_SESSION_NAME)
     if session_cookie:
+        operator, expected_csrf = validate_session(session_cookie)
+        if operator and expected_csrf:
+            if not x_csrf_token or not secrets.compare_digest(x_csrf_token, expected_csrf):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Invalid or missing CSRF token on logout.",
+                )
         revoke_session(session_cookie)
+
     _clear_session_cookie(response)
     return {"status": "REVOKED", "message": "Operator session revoked successfully."}
 

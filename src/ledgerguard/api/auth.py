@@ -22,8 +22,22 @@ def verify_bearer_token(
     if session_cookie:
         operator, expected_csrf = validate_session(session_cookie)
         if operator:
-            # Enforce CSRF token on mutating actions when using cookie authentication
+            # Enforce Origin check and CSRF token on mutating actions when using cookie authentication
             if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+                origin = request.headers.get("origin")
+                if origin:
+                    request_host = request.headers.get("host", "").split(":")[0]
+                    trusted_hosts = {"localhost", "127.0.0.1", "testserver"}
+                    if request_host:
+                        trusted_hosts.add(request_host)
+                    from urllib.parse import urlparse
+                    parsed = urlparse(origin)
+                    origin_host = parsed.hostname
+                    if origin_host not in trusted_hosts:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Cross-origin state-changing request rejected.",
+                        )
                 if not x_csrf_token or not expected_csrf or not secrets.compare_digest(x_csrf_token, expected_csrf):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,

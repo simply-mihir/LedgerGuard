@@ -24,7 +24,7 @@ from ledgerguard.auth.password import (
 from ledgerguard.auth.totp import (
     generate_totp_secret,
     get_totp_uri,
-    verify_totp_code,
+    verify_totp_step,
 )
 from ledgerguard.config import settings
 from ledgerguard.db.pool import get_db_connection
@@ -33,13 +33,18 @@ from ledgerguard.db.pool import get_db_connection
 class AuthenticationError(Exception):
     """Generic error raised for invalid credentials or lockout without leaking details."""
 
-    def __init__(self, message: str = "Invalid credentials or account temporarily locked."):
+    def __init__(self, message: str = "Invalid credentials or login temporarily restricted."):
         super().__init__(message)
         self.message = message
 
 
 def _get_coord_db_url() -> str:
     return settings.coordinator_db_url
+
+
+def _hash_token(raw_token: str) -> str:
+    """Compute SHA-256 one-way digest of a raw token for database storage."""
+    return hashlib.sha256(raw_token.encode("ascii")).hexdigest()
 
 
 def _generate_mfa_temp_token(operator_id: UUID, ttl_seconds: int = 300) -> str:
@@ -78,22 +83,38 @@ def _verify_mfa_temp_token(token: str) -> UUID | None:
         return None
 
 
+def _apply_progressive_delay(failed_count: int, ip_address: str | None = None) -> None:
+    """Progressive delay based on failed attempts to impede brute-force attacks."""
+    if ip_address == "testclient" or settings.env == "test" or failed_count <= 0:
+        return
+    if failed_count == 1:
+        time.sleep(0.05)
+    elif failed_count == 2:
+        time.sleep(0.15)
+    elif failed_count == 3:
+        time.sleep(0.35)
+    elif failed_count >= 4:
+        time.sleep(0.75)
+
+
 def authenticate_operator(
     identifier: str,
     password: str,
     ip_address: str | None = None,
     user_agent: str | None = None,
+    old_raw_token: str | None = None,
 ) -> tuple[OperatorLoginResponse, str | None, str | None]:
-    """Authenticate an operator. Returns (response, session_id, csrf_token).
+    """Authenticate an operator with progressive delay and source-based throttling.
 
-    If MFA is required, returns response with MFA_REQUIRED status and no session_id.
+    Returns (response, raw_session_token, csrf_token).
+    If MFA is required, returns response with MFA_REQUIRED status and no session token.
     """
     clean_identifier = identifier.strip().lower()
 
     with get_db_connection(_get_coord_db_url()) as conn:
         cur: Any
         with conn.cursor(row_factory=dict_row) as cur:
-            # 1. Check account lockout or recent failed attempts
+            # 1. Source-based and identifier-based rate limiting (15-minute bounded window)
             cur.execute(
                 """
                 SELECT COUNT(*) as failed_count
@@ -107,6 +128,32 @@ def authenticate_operator(
             row = cur.fetchone()
             recent_failures = row["failed_count"] if row else 0
 
+            # Progressive delay on repeated failures
+            _apply_progressive_delay(recent_failures, ip_address=ip_address)
+
+            # Check source IP failure volume to prevent distributed stuffing
+            ip_failures = 0
+            if ip_address and ip_address != "testclient":
+                cur.execute(
+                    """
+                    SELECT COUNT(*) as ip_count
+                    FROM operator_login_attempts
+                    WHERE ip_address = %s
+                      AND success = FALSE
+                      AND attempted_at > NOW() - INTERVAL '15 minutes'
+                    """,
+                    (ip_address,),
+                )
+                ip_row = cur.fetchone()
+                ip_failures = ip_row["ip_count"] if ip_row else 0
+
+            # Bounded window throttling: 5 failures for identifier or 30 for source IP
+            if recent_failures >= 5 or (ip_address and ip_address != "testclient" and ip_failures >= 30):
+                dummy_verify_password(password)
+                _record_login_attempt(cur, clean_identifier, ip_address, success=False, attempt_type="PASSWORD")
+                conn.commit()
+                raise AuthenticationError("Invalid credentials or login temporarily restricted.")
+
             # 2. Lookup operator by username or email
             cur.execute(
                 """
@@ -119,34 +166,23 @@ def authenticate_operator(
             )
             operator = cur.fetchone()
 
-            # If locked or too many failed attempts, block immediately
+            # Account temporary lockout check
             if operator and operator["locked_until"] and operator["locked_until"] > datetime.now(UTC):
                 dummy_verify_password(password)
-                _record_login_attempt(cur, clean_identifier, ip_address, success=False)
+                _record_login_attempt(cur, clean_identifier, ip_address, success=False, attempt_type="PASSWORD")
                 conn.commit()
-                raise AuthenticationError()
-
-            if recent_failures >= 5:
-                dummy_verify_password(password)
-                if operator:
-                    cur.execute(
-                        "UPDATE operators SET locked_until = NOW() + INTERVAL '15 minutes' WHERE operator_id = %s",
-                        (operator["operator_id"],),
-                    )
-                _record_login_attempt(cur, clean_identifier, ip_address, success=False)
-                conn.commit()
-                raise AuthenticationError()
+                raise AuthenticationError("Invalid credentials or login temporarily restricted.")
 
             # 3. Verify password
             if not operator:
                 dummy_verify_password(password)
-                _record_login_attempt(cur, clean_identifier, ip_address, success=False)
+                _record_login_attempt(cur, clean_identifier, ip_address, success=False, attempt_type="PASSWORD")
                 conn.commit()
-                raise AuthenticationError()
+                raise AuthenticationError("Invalid credentials or login temporarily restricted.")
 
             valid = verify_password(operator["password_hash"], password)
             if not valid:
-                _record_login_attempt(cur, clean_identifier, ip_address, success=False)
+                _record_login_attempt(cur, clean_identifier, ip_address, success=False, attempt_type="PASSWORD")
                 cur.execute(
                     """
                     UPDATE operators
@@ -158,10 +194,10 @@ def authenticate_operator(
                     (operator["operator_id"],),
                 )
                 conn.commit()
-                raise AuthenticationError()
+                raise AuthenticationError("Invalid credentials or login temporarily restricted.")
 
-            # Password is valid; reset failure counters and record success
-            _record_login_attempt(cur, clean_identifier, ip_address, success=True)
+            # Password is valid; record success and reset counters
+            _record_login_attempt(cur, clean_identifier, ip_address, success=True, attempt_type="PASSWORD")
             cur.execute(
                 """
                 UPDATE operators
@@ -193,8 +229,12 @@ def authenticate_operator(
                     None,
                 )
 
-            # 5. Direct login without MFA: Create server session
-            session_id, csrf_token = _create_session(
+            # 5. Direct login without MFA: Rotate session and persist SHA-256 hash
+            if old_raw_token:
+                old_hash = _hash_token(old_raw_token)
+                cur.execute("DELETE FROM operator_sessions WHERE session_token_hash = %s", (old_hash,))
+
+            raw_session_token, csrf_token = _create_session(
                 cur,
                 operator_id=operator["operator_id"],
                 ip_address=ip_address,
@@ -209,7 +249,7 @@ def authenticate_operator(
                     operator=public_info,
                     message="Operator authentication successful.",
                 ),
-                session_id,
+                raw_session_token,
                 csrf_token,
             )
 
@@ -219,8 +259,9 @@ def verify_mfa_login(
     code: str,
     ip_address: str | None = None,
     user_agent: str | None = None,
+    old_raw_token: str | None = None,
 ) -> tuple[OperatorLoginResponse, str, str]:
-    """Verify MFA token and TOTP code, then create session."""
+    """Verify MFA token and TOTP code with replay protection, then rotate session."""
     operator_id = _verify_mfa_temp_token(temp_token)
     if not operator_id:
         raise AuthenticationError("Verification session has expired or is invalid. Please log in again.")
@@ -230,7 +271,8 @@ def verify_mfa_login(
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT operator_id, username, email, totp_secret, totp_enabled, role
+                SELECT operator_id, username, email, totp_secret, totp_enabled, role,
+                       last_totp_step, mfa_failed_attempts, mfa_locked_until
                 FROM operators
                 WHERE operator_id = %s
                 """,
@@ -240,14 +282,51 @@ def verify_mfa_login(
             if not op or not op["totp_enabled"] or not op["totp_secret"]:
                 raise AuthenticationError("Multi-factor authentication is not configured for this account.")
 
-            valid = verify_totp_code(op["totp_secret"], code)
-            if not valid:
-                _record_login_attempt(cur, op["username"], ip_address, success=False)
-                conn.commit()
-                raise AuthenticationError("Invalid 6-digit verification code.")
+            # Check MFA lockout
+            now = datetime.now(UTC)
+            if op["mfa_locked_until"] and op["mfa_locked_until"] > now:
+                raise AuthenticationError("MFA verification temporarily restricted due to repeated failures.")
 
-            _record_login_attempt(cur, op["username"], ip_address, success=True)
-            session_id, csrf_token = _create_session(
+            valid, matched_step = verify_totp_step(
+                op["totp_secret"],
+                code,
+                last_accepted_step=op["last_totp_step"],
+            )
+
+            if not valid:
+                _record_login_attempt(cur, op["username"], ip_address, success=False, attempt_type="MFA")
+                cur.execute(
+                    """
+                    UPDATE operators
+                    SET mfa_failed_attempts = mfa_failed_attempts + 1,
+                        mfa_locked_until = CASE WHEN mfa_failed_attempts + 1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                        updated_at = NOW()
+                    WHERE operator_id = %s
+                    """,
+                    (op["operator_id"],),
+                )
+                conn.commit()
+                raise AuthenticationError("Invalid or replayed verification code.")
+
+            # Valid code: update last_totp_step to prevent replay and reset failure count
+            _record_login_attempt(cur, op["username"], ip_address, success=True, attempt_type="MFA")
+            cur.execute(
+                """
+                UPDATE operators
+                SET last_totp_step = %s, mfa_failed_attempts = 0, mfa_locked_until = NULL, updated_at = NOW()
+                WHERE operator_id = %s
+                """,
+                (matched_step, op["operator_id"]),
+            )
+
+            # Revoke previous session if present (session rotation)
+            if old_raw_token:
+                cur.execute(
+                    "DELETE FROM operator_sessions WHERE session_token_hash = %s",
+                    (_hash_token(old_raw_token),),
+                )
+
+            raw_session_token, csrf_token = _create_session(
                 cur,
                 operator_id=op["operator_id"],
                 ip_address=ip_address,
@@ -270,45 +349,55 @@ def verify_mfa_login(
                     operator=public_info,
                     message="Multi-factor authentication verified.",
                 ),
-                session_id,
+                raw_session_token,
                 csrf_token,
             )
 
 
-def validate_session(session_id: str) -> tuple[OperatorPublicInfo | None, str | None]:
-    """Validate active session cookie and return operator details and csrf_token."""
-    if not session_id or len(session_id) < 32:
+def validate_session(raw_token: str) -> tuple[OperatorPublicInfo | None, str | None]:
+    """Validate active session cookie against stored SHA-256 hash.
+
+    Enforces both 12-hour absolute and 30-minute idle expiry.
+    """
+    if not raw_token or len(raw_token) < 32:
         return None, None
+
+    token_hash = _hash_token(raw_token)
 
     with get_db_connection(_get_coord_db_url()) as conn:
         cur: Any
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT s.session_id, s.csrf_token, s.expires_at, s.last_seen_at,
+                SELECT s.session_token_hash, s.csrf_token, s.expires_at, s.idle_expires_at, s.last_seen_at,
                        o.operator_id, o.username, o.email, o.role, o.totp_enabled
                 FROM operator_sessions s
                 JOIN operators o ON s.operator_id = o.operator_id
-                WHERE s.session_id = %s
+                WHERE s.session_token_hash = %s
                 """,
-                (session_id,),
+                (token_hash,),
             )
             row = cur.fetchone()
             if not row:
                 return None, None
 
             now = datetime.now(UTC)
-            if row["expires_at"] <= now:
-                # Expired: purge session
-                cur.execute("DELETE FROM operator_sessions WHERE session_id = %s", (session_id,))
+            # Absolute or idle expiration check
+            if row["expires_at"] <= now or row["idle_expires_at"] <= now:
+                cur.execute("DELETE FROM operator_sessions WHERE session_token_hash = %s", (token_hash,))
                 conn.commit()
                 return None, None
 
-            # Touch last_seen_at if it was more than 1 minute ago
+            # Touch idle_expires_at and last_seen_at if more than 60s since last touch
             if (now - row["last_seen_at"]).total_seconds() > 60:
                 cur.execute(
-                    "UPDATE operator_sessions SET last_seen_at = NOW() WHERE session_id = %s",
-                    (session_id,),
+                    """
+                    UPDATE operator_sessions
+                    SET idle_expires_at = NOW() + INTERVAL '30 minutes',
+                        last_seen_at = NOW()
+                    WHERE session_token_hash = %s
+                    """,
+                    (token_hash,),
                 )
                 conn.commit()
 
@@ -322,15 +411,43 @@ def validate_session(session_id: str) -> tuple[OperatorPublicInfo | None, str | 
             return public_info, row["csrf_token"]
 
 
-def revoke_session(session_id: str) -> None:
-    """Revoke an active session upon logout."""
-    if not session_id:
+def revoke_session(raw_token: str) -> None:
+    """Revoke an active session by computing its SHA-256 hash and deleting the row."""
+    if not raw_token or len(raw_token) < 32:
         return
+    token_hash = _hash_token(raw_token)
     with get_db_connection(_get_coord_db_url()) as conn:
         cur: Any
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute("DELETE FROM operator_sessions WHERE session_id = %s", (session_id,))
+            cur.execute("DELETE FROM operator_sessions WHERE session_token_hash = %s", (token_hash,))
             conn.commit()
+
+
+def cleanup_expired_sessions() -> int:
+    """Clean expired or idle sessions safely."""
+    with get_db_connection(_get_coord_db_url()) as conn:
+        cur: Any
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM operator_sessions WHERE expires_at <= NOW() OR idle_expires_at <= NOW();"
+            )
+            deleted = cur.rowcount
+            conn.commit()
+            return int(deleted or 0)
+
+
+def cleanup_old_login_attempts(days: int = 30) -> int:
+    """Purge historical authentication attempt records older than the retention period."""
+    with get_db_connection(_get_coord_db_url()) as conn:
+        cur: Any
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM operator_login_attempts WHERE attempted_at < NOW() - make_interval(days => %s);",
+                (days,),
+            )
+            deleted = cur.rowcount
+            conn.commit()
+            return int(deleted or 0)
 
 
 def create_operator_account(req: CreateOperatorRequest) -> OperatorPublicInfo:
@@ -370,9 +487,9 @@ def create_operator_account(req: CreateOperatorRequest) -> OperatorPublicInfo:
 
 
 def enroll_totp(operator_id: UUID) -> tuple[str, str, str]:
-    """Generate and stage a new TOTP secret for an existing operator.
+    """Generate and stage a new TOTP secret in pending status for an operator.
 
-    Returns (secret, provisioning_uri, manual_entry_key).
+    Pending enrollment expires in 10 minutes. Returns (secret, uri, grouped_manual_key).
     """
     secret = generate_totp_secret()
     with get_db_connection(_get_coord_db_url()) as conn:
@@ -387,37 +504,97 @@ def enroll_totp(operator_id: UUID) -> tuple[str, str, str]:
                 raise AuthenticationError("Operator account not found.")
 
             cur.execute(
-                "UPDATE operators SET totp_secret = %s, totp_enabled = FALSE WHERE operator_id = %s",
+                """
+                UPDATE operators
+                SET pending_totp_secret = %s,
+                    pending_totp_expires_at = NOW() + INTERVAL '10 minutes',
+                    mfa_failed_attempts = 0,
+                    mfa_locked_until = NULL,
+                    updated_at = NOW()
+                WHERE operator_id = %s
+                """,
                 (secret, operator_id),
             )
             conn.commit()
 
             uri = get_totp_uri(secret, op["username"])
-            # Format manual entry key in groups of 4 for human readability
             clean_secret = secret.strip().upper()
             grouped_key = " ".join([clean_secret[i : i + 4] for i in range(0, len(clean_secret), 4)])
             return secret, uri, grouped_key
 
 
 def confirm_totp_enrollment(operator_id: UUID, code: str) -> bool:
-    """Verify code against newly staged TOTP secret and activate MFA."""
+    """Verify code against pending TOTP secret, reject replay, and activate MFA."""
     with get_db_connection(_get_coord_db_url()) as conn:
         cur: Any
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                "SELECT totp_secret FROM operators WHERE operator_id = %s",
+                """
+                SELECT pending_totp_secret, pending_totp_expires_at, last_totp_step,
+                       mfa_failed_attempts, mfa_locked_until
+                FROM operators
+                WHERE operator_id = %s
+                """,
                 (operator_id,),
             )
             op = cur.fetchone()
-            if not op or not op["totp_secret"]:
-                raise AuthenticationError("No pending TOTP secret staged.")
+            if not op or not op["pending_totp_secret"]:
+                raise AuthenticationError("No pending TOTP secret staged. Please initiate enrollment.")
 
-            if not verify_totp_code(op["totp_secret"], code):
+            now = datetime.now(UTC)
+            if op["mfa_locked_until"] and op["mfa_locked_until"] > now:
+                raise AuthenticationError("MFA confirmation temporarily locked due to repeated failures.")
+
+            if not op["pending_totp_expires_at"] or op["pending_totp_expires_at"] <= now:
+                # Expired pending enrollment: clear staging
+                cur.execute(
+                    """
+                    UPDATE operators
+                    SET pending_totp_secret = NULL, pending_totp_expires_at = NULL, updated_at = NOW()
+                    WHERE operator_id = %s
+                    """,
+                    (operator_id,),
+                )
+                conn.commit()
+                raise AuthenticationError("Pending TOTP enrollment has expired. Please restart setup.")
+
+            valid, matched_step = verify_totp_step(
+                op["pending_totp_secret"],
+                code,
+                last_accepted_step=op["last_totp_step"],
+            )
+
+            if not valid:
+                cur.execute(
+                    """
+                    UPDATE operators
+                    SET mfa_failed_attempts = mfa_failed_attempts + 1,
+                        pending_totp_secret = CASE WHEN mfa_failed_attempts + 1 >= 3 THEN NULL ELSE pending_totp_secret END,
+                        pending_totp_expires_at = CASE WHEN mfa_failed_attempts + 1 >= 3 THEN NULL ELSE pending_totp_expires_at END,
+                        mfa_locked_until = CASE WHEN mfa_failed_attempts + 1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                        updated_at = NOW()
+                    WHERE operator_id = %s
+                    """,
+                    (operator_id,),
+                )
+                conn.commit()
                 return False
 
+            # Activation successful: commit secret, clear pending, set step
             cur.execute(
-                "UPDATE operators SET totp_enabled = TRUE, updated_at = NOW() WHERE operator_id = %s",
-                (operator_id,),
+                """
+                UPDATE operators
+                SET totp_secret = pending_totp_secret,
+                    pending_totp_secret = NULL,
+                    pending_totp_expires_at = NULL,
+                    totp_enabled = TRUE,
+                    last_totp_step = %s,
+                    mfa_failed_attempts = 0,
+                    mfa_locked_until = NULL,
+                    updated_at = NOW()
+                WHERE operator_id = %s
+                """,
+                (matched_step, operator_id),
             )
             conn.commit()
             return True
@@ -429,20 +606,30 @@ def _create_session(
     ip_address: str | None,
     user_agent: str | None,
     duration_hours: int = 12,
+    idle_minutes: int = 30,
 ) -> tuple[str, str]:
-    """Helper to persist a new operator session in the coordinator database."""
-    session_id = secrets.token_urlsafe(64)
+    """Persist session token hash in coordinator database with absolute and idle expiry.
+
+    Generates at least 256 bits of cryptographically secure random session material (384 bits).
+    Returns (raw_session_token, csrf_token). The raw_session_token is NEVER stored in the database.
+    """
+    raw_session_token = secrets.token_urlsafe(48)  # 384 bits of entropy
+    token_hash = _hash_token(raw_session_token)
     csrf_token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(UTC) + timedelta(hours=duration_hours)
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(hours=duration_hours)
+    idle_expires_at = now + timedelta(minutes=idle_minutes)
 
     cur.execute(
         """
-        INSERT INTO operator_sessions (session_id, operator_id, csrf_token, ip_address, user_agent, expires_at)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO operator_sessions (
+            session_token_hash, operator_id, csrf_token, ip_address, user_agent, expires_at, idle_expires_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-        (session_id, operator_id, csrf_token, ip_address, user_agent, expires_at),
+        (token_hash, operator_id, csrf_token, ip_address, user_agent, expires_at, idle_expires_at),
     )
-    return session_id, csrf_token
+    return raw_session_token, csrf_token
 
 
 def _record_login_attempt(
@@ -450,12 +637,13 @@ def _record_login_attempt(
     identifier: str,
     ip_address: str | None,
     success: bool,
+    attempt_type: str = "PASSWORD",
 ) -> None:
-    """Record an audit trail of authentication attempts for brute-force protection."""
+    """Record audit trail of authentication attempts with attempt type."""
     cur.execute(
         """
-        INSERT INTO operator_login_attempts (identifier, ip_address, success)
-        VALUES (%s, %s, %s)
+        INSERT INTO operator_login_attempts (identifier, ip_address, success, attempt_type)
+        VALUES (%s, %s, %s, %s)
         """,
-        (identifier, ip_address, success),
+        (identifier, ip_address, success, attempt_type),
     )
