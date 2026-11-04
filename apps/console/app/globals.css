@@ -275,3 +275,37 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     transform: none !important;
   }
 }
+
+/* Responsive Display Utilities */
+.hidden {
+  display: none !important;
+}
+
+@media (min-width: 640px) {
+  .sm\:flex {
+    display: flex !important;
+  }
+  .sm\:hidden {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .md\:flex {
+    display: flex !important;
+  }
+  .md\:block {
+    display: block !important;
+  }
+  .md\:hidden {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .signal-sheet-panel {
+    max-width: 100% !important;
+    border-left: none !important;
+  }
+}
+
