@@ -54,7 +54,7 @@ The core architecture coordinates balance movements across three isolated Postgr
 </p>
 
 <p align="center">
-  <img src="docs/assets/ledgerguard-overview.png" alt="LedgerGuard authenticated operator console overview showing 3-node PostgreSQL mesh and clearing conservation invariant" width="900">
+  <img src="docs/assets/ledgerguard-overview.png" alt="LedgerGuard authenticated operator console overview showing three independently reachable PostgreSQL instances and clearing conservation invariant" width="900">
 </p>
 
 ---
@@ -365,26 +365,29 @@ docker compose down
 
 The test suite validates accounting correctness, concurrency safety, failure recovery, and reconciliation across live PostgreSQL 17 instances.
 
-### Current Repository Baseline (Verified November 2026)
+### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 63 passing tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 68 passing tests (`uv run pytest -ra -W error`)
 - **Linting:** 0 Ruff errors (`uv run ruff check .`)
 - **Type Checking:** 0 Mypy errors across 34 source files (`uv run mypy src`)
-- **Frontend Test Suite:** 11 passing tests (`npm test` in `apps/console`)
+- **Frontend Test Suite:** 24 passing tests (`npm test` in `apps/console`)
 - **Console Build:** Clean Next.js 15 production build (`npm run build`)
 - **Production Vulnerabilities:** 0 vulnerabilities (`npm audit --omit=dev` and `pip-audit`)
 - **Signature Recovery Demo:** 8/8 steps and 15/15 checkpoints passing (`./scripts/demo_signature_recovery.sh`)
 
 ### Operator Provisioning & Verification
 
-LedgerGuard features a secure full-stack operator authentication system with Argon2id password hashing, RFC 6238 TOTP multi-factor verification, and server-managed HttpOnly sessions.
+LedgerGuard features a secure full-stack operator authentication system with Argon2id password hashing, RFC 6238 TOTP multi-factor verification with replay protection, SHA-256 hashed session tokens, and server-managed HttpOnly cookies. Plaintext passwords are never accepted via CLI flags.
 
 ```bash
-# Provision local demo operator credentials for development/testing
+# Provision local demo operator credentials (prompts hiddenly or uses LEDGERGUARD_TEST_ADMIN_PASSWORD in dev/test)
 uv run python -m ledgerguard.cli seed-demo-operator --username operator --email operator@ledgerguard.internal
 
-# Or create a custom operator with specific role and optional TOTP
+# Or create a custom operator with hidden interactive input and confirmation prompt
 uv run python -m ledgerguard.cli create-operator --username admin --email admin@ledgerguard.internal --role ADMIN --enable-totp
+
+# For automated CI/CD pipelines, supply password via protected standard input
+echo "$OPERATOR_PASSWORD" | uv run python -m ledgerguard.cli create-operator --username ci_operator --email ci@ledgerguard.internal --stdin-password
 ```
 
 ### Execute Verification Commands
@@ -419,10 +422,11 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) | 11 | TCC-style failure matrix: lost prepare replies, crash after `COMMIT`, crash between confirms, frozen/closed account rejections, idempotency retries. |
 | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) | 4 | Multi-database reachability probing, corrupted hold cache detection, stopped-and-drained full cluster audit. |
 | [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
-| [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 7 | Argon2id verification, lockout after 5 failed attempts, session revocation, CSRF token validation, RFC 6238 TOTP multi-factor lifecycle. |
+| [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 10 | Argon2id verification, SHA-256 session token hashing, idle & absolute expiry, TOTP replay rejection, source-based rate limiting, CSRF and origin validation. |
+| [`tests/test_auth_permissions.py`](tests/test_auth_permissions.py) | 2 | PostgreSQL role boundary enforcement: reporter role denied SELECT on auth tables; app role denied DELETE on operators and UPDATE on login attempts. |
 | [`tests/test_reference_model.py`](tests/test_reference_model.py) | 1 | Hypothesis stateful property tests comparing concurrent multi-account execution against an in-memory reference model. |
 | [`tests/test_smoke.py`](tests/test_smoke.py) | 5 | Live PostgreSQL 17 connectivity, migration tracking tables, application connection role boundary enforcement. |
-| **Total** | **63** | **100% Passing** |
+| **Total** | **68** | **100% Passing** |
 
 ---
 

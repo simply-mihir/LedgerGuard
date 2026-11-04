@@ -60,7 +60,7 @@ describe('Financial Arithmetic & Formatting', () => {
 });
 
 describe('Architecture Truthfulness Guard', () => {
-  it('verifies that consensus-free 3-database topology constants are exact', () => {
+  it('verifies that the 3-database topology constants are exact', () => {
     const topology = [
       { name: 'Coordinator', port: 5442 },
       { name: 'Ledger 1', port: 5443 },

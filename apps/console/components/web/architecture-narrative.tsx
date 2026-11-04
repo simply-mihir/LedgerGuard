@@ -235,7 +235,7 @@ export function ArchitectureNarrative() {
                 LIVE RUNTIME TOPOLOGY (STAGE {currentStage.step}/5)
               </div>
               <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-operational)' }}>
-                PostgreSQL 17 Triad Cluster Mesh
+                Three Independently Reachable PostgreSQL Instances
               </div>
             </div>
             <div

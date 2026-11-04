@@ -151,7 +151,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         {/* Cluster Connectivity Telemetry Widget */}
         <div className="p-4 mx-3 mb-3 bg-white border border-[#E5E2DA] flex flex-col gap-2">
           <div className="flex items-center justify-between text-[11px] font-mono uppercase">
-            <span className="text-[#737373]">3-Node Mesh</span>
+            <span className="text-[#737373]">3 Databases</span>
             <span className={allReachable ? 'text-[#16A34A] font-bold' : 'text-[#DC2626] font-bold'}>
               {allReachable ? 'Synchronized' : 'Degraded'}
             </span>

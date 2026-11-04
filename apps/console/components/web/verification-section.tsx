@@ -2,12 +2,12 @@ import React from 'react';
 
 export function VerificationSection() {
   const checks = [
-    { label: 'Pytest Test Suite', value: '56 Passed', detail: 'Zero warnings; strict error mode' },
-    { label: 'Mypy Type Checking', value: '27 Files Verified', detail: 'Zero static type violations' },
-    { label: 'Ruff Linter', value: 'Clean Pass', detail: 'Zero code style or syntax defects' },
-    { label: 'Python Dependency Audit', value: '0 Vulnerabilities', detail: 'Verified via pip-audit' },
-    { label: 'Frontend Test Runner', value: 'Node 20 Compatible', detail: '11 backend events mapped & tested' },
-    { label: 'Crash Recovery Demo', value: '8/8 Stages Pass', detail: '100% forward recovery verified' },
+    { label: 'Pytest Test Suite', value: 'Strict Error Mode', detail: 'Automated test suites with all warnings escalated to errors' },
+    { label: 'Mypy Type Checking', value: 'Strict Typing', detail: 'Zero static type violations across all source modules' },
+    { label: 'Ruff Linter', value: 'Zero Style Defects', detail: 'Codebase style and syntax invariants enforced' },
+    { label: 'Dependency Audits', value: 'Continuous CVE Checks', detail: 'Automated pip-audit and npm audit checks in CI' },
+    { label: 'Frontend Test Runner', value: 'Node 20 Compatible', detail: 'Authoritative TCC workflow events mapped and tested' },
+    { label: 'Crash Recovery Demo', value: 'Deterministic Replay', detail: 'Forward crash recovery and signature verification' },
   ];
 
   return (

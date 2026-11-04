@@ -14,7 +14,7 @@ interface TopBarProps {
 const TAB_METADATA: Record<NavigationTab, { title: string; subtitle: string }> = {
   overview: {
     title: 'Platform Overview',
-    subtitle: 'Autonomous PostgreSQL 17 cluster mesh & invariant telemetry',
+    subtitle: 'Three independently reachable PostgreSQL instances & invariant telemetry',
   },
   accounts: {
     title: 'Customer Accounts',

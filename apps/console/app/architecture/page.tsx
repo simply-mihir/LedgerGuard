@@ -71,8 +71,8 @@ export default function ArchitecturePage() {
             1. Three Autonomous PostgreSQL 17 Databases
           </h2>
           <p style={{ fontSize: '1rem', color: 'var(--text-ink-secondary)', lineHeight: 1.65, marginBottom: '1.5rem' }}>
-            LedgerGuard avoids the fragility of shared distributed tables. The cluster mesh consists of three physically
-            isolated PostgreSQL 17 database instances running on distinct network ports:
+            LedgerGuard avoids the fragility of shared distributed tables. The system architecture consists of three
+            independently reachable PostgreSQL instances running on distinct network ports:
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>

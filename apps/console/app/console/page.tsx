@@ -41,7 +41,7 @@ export default function ConsoleOverviewPage() {
   if (loading && !overview) {
     return (
       <div className="py-20 text-center font-mono text-xs uppercase tracking-widest text-[#64748B]">
-        Polling 3-node PostgreSQL mesh &amp; invariant telemetry...
+        Polling 3-database topology &amp; invariant telemetry...
       </div>
     );
   }
@@ -59,7 +59,7 @@ export default function ConsoleOverviewPage() {
             Platform Telemetry &amp; Conservation State
           </h1>
           <p className="text-xs text-[#94A3B8] max-w-2xl mt-1">
-            Real-time consensus-free coordination between autonomous PostgreSQL 17 databases. Try-Confirm-Cancel lifecycle, transactional outbox relays, and mathematical clearing invariants.
+            Application-level TCC coordination across three independently reachable PostgreSQL instances. Transactional outbox relays, participant hold reservations, and cross-ledger reconciliation.
           </p>
         </div>
 
@@ -137,9 +137,9 @@ export default function ConsoleOverviewPage() {
         </div>
       </div>
 
-      {/* Split Operational Telemetry: 3-Database Topology Mesh + Clearing Conservation Invariant */}
+      {/* Split Operational Telemetry: Three Independently Reachable PostgreSQL Instances + Clearing Conservation Invariant */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: 3-Database Mesh */}
+        {/* Left Column: 3-Database Topology */}
         <div className="lg:col-span-6 p-6 bg-[#0F172A] border border-[#1E293B] flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-[#1E293B]">
@@ -152,7 +152,7 @@ export default function ConsoleOverviewPage() {
             </div>
 
             <p className="text-xs text-[#94A3B8] my-4 leading-relaxed">
-              LedgerGuard operates without distributed transactions or Raft clustering. The Coordinator maintains transfer intent, durable decision state, and account directory. Ledger 1 and Ledger 2 maintain independent double-entry journals.
+              LedgerGuard coordinates three independently reachable PostgreSQL instances using an application-level TCC workflow. The Coordinator database manages transfer intents, durable decision state, and account routing. Ledger 1 and Ledger 2 participant databases maintain independent double-entry journals.
             </p>
 
             {/* 3 Node Rows */}

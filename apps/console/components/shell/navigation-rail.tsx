@@ -255,7 +255,7 @@ export function NavigationRail({
               }}
             >
               <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Cluster Mesh
+                Database Topology
               </span>
               <span
                 style={{
@@ -264,7 +264,7 @@ export function NavigationRail({
                   color: isAllReachable ? '#0df2a6' : '#fb7185',
                 }}
               >
-                {isAllReachable ? '3/3 NODES LIVE' : 'DEGRADED'}
+                {isAllReachable ? '3/3 INSTANCES LIVE' : 'DEGRADED'}
               </span>
             </div>
 
@@ -319,7 +319,7 @@ export function NavigationRail({
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <span
-              title="Cluster Mesh"
+              title="Database Topology"
               style={{
                 width: '10px',
                 height: '10px',

@@ -62,7 +62,7 @@ export const WORKFLOW_EVENT_DEFINITIONS: Record<string, WorkflowEventDefinition>
   },
   DECISION_MADE: {
     eventType: 'DECISION_MADE',
-    stageTitle: 'Decision Point: Consensus Decision Logged',
+    stageTitle: 'Decision Point: Coordinator Decision Logged',
     phase: 'decision',
     description: 'Coordinator writes atomic, immutable COMMIT or CANCEL decision to transfer_decisions under row lock.',
   },

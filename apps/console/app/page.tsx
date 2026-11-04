@@ -114,7 +114,7 @@ export default function HomePage() {
               >
                 <div>
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-operational-muted)', letterSpacing: '0.06em' }}>
-                    DISTRIBUTED POSTGRESQL 17 MESH
+                    THREE INDEPENDENT POSTGRESQL 17 INSTANCES
                   </div>
                   <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#FFFFFF' }}>
                     Independent Isolation Domains
