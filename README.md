@@ -50,7 +50,11 @@
 The core architecture coordinates balance movements across three isolated PostgreSQL 17 database instances: a **Coordinator** managing account routing and durable decision logs, and two independent **Participant Ledgers** maintaining localized double-entry accounting kernels. Distributed transfers use an application-level **Try-Confirm-Cancel (TCC)** workflow with durable forward recovery rather than classical distributed transaction managers (XA 2PC). Each participant operation executes and commits as an independent, locally atomic PostgreSQL transaction, preventing distributed lock stalls across network calls while ensuring that once a transfer decision is logged, the system recovers forward to settlement with zero duplicate financial effect.
 
 <p align="center">
-  <img src="docs/assets/ledgerguard-overview.png" alt="LedgerGuard operator console overview showing database health and reconciliation status" width="900">
+  <img src="docs/assets/ledgerguard-landing.png" alt="LedgerGuard editorial landing page showcasing 3-database TCC architecture narrative" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/assets/ledgerguard-overview.png" alt="LedgerGuard authenticated operator console overview showing 3-node PostgreSQL mesh and clearing conservation invariant" width="900">
 </p>
 
 ---
@@ -363,12 +367,25 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Current Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 56 passing tests in ~9 seconds (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 63 passing tests (`uv run pytest -ra -W error`)
 - **Linting:** 0 Ruff errors (`uv run ruff check .`)
-- **Type Checking:** 0 Mypy errors across 27 source files (`uv run mypy src`)
+- **Type Checking:** 0 Mypy errors across 34 source files (`uv run mypy src`)
+- **Frontend Test Suite:** 11 passing tests (`npm test` in `apps/console`)
 - **Console Build:** Clean Next.js 15 production build (`npm run build`)
-- **Production Vulnerabilities:** 0 vulnerabilities (`npm audit --omit=dev`)
+- **Production Vulnerabilities:** 0 vulnerabilities (`npm audit --omit=dev` and `pip-audit`)
 - **Signature Recovery Demo:** 8/8 steps and 15/15 checkpoints passing (`./scripts/demo_signature_recovery.sh`)
+
+### Operator Provisioning & Verification
+
+LedgerGuard features a secure full-stack operator authentication system with Argon2id password hashing, RFC 6238 TOTP multi-factor verification, and server-managed HttpOnly sessions.
+
+```bash
+# Provision local demo operator credentials for development/testing
+uv run python -m ledgerguard.cli seed-demo-operator --username operator --email operator@ledgerguard.internal
+
+# Or create a custom operator with specific role and optional TOTP
+uv run python -m ledgerguard.cli create-operator --username admin --email admin@ledgerguard.internal --role ADMIN --enable-totp
+```
 
 ### Execute Verification Commands
 
@@ -381,6 +398,9 @@ uv run ruff check .
 
 # Run static type checker
 uv run mypy src
+
+# Run frontend test suite
+cd apps/console && npm test && cd ../..
 
 # Run signature recovery demonstration
 ./scripts/demo_signature_recovery.sh
@@ -399,9 +419,10 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) | 11 | TCC-style failure matrix: lost prepare replies, crash after `COMMIT`, crash between confirms, frozen/closed account rejections, idempotency retries. |
 | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) | 4 | Multi-database reachability probing, corrupted hold cache detection, stopped-and-drained full cluster audit. |
 | [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
+| [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 7 | Argon2id verification, lockout after 5 failed attempts, session revocation, CSRF token validation, RFC 6238 TOTP multi-factor lifecycle. |
 | [`tests/test_reference_model.py`](tests/test_reference_model.py) | 1 | Hypothesis stateful property tests comparing concurrent multi-account execution against an in-memory reference model. |
-| [`tests/test_smoke.py`](tests/test_smoke.py) | 3 | Live PostgreSQL 17 connectivity, migration tracking tables, application connection role boundary enforcement. |
-| **Total** | **54** | **100% Passing** |
+| [`tests/test_smoke.py`](tests/test_smoke.py) | 5 | Live PostgreSQL 17 connectivity, migration tracking tables, application connection role boundary enforcement. |
+| **Total** | **63** | **100% Passing** |
 
 ---
 
