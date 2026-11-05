@@ -90,6 +90,37 @@ test.describe('Visual & Motion Verification: Scroll Storytelling, Navigation & R
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/console/);
 
+    // Intercept transfer timeline with authoritative workflow events for deterministic UI milestone testing
+    await page.route('**/api/operator/transfers/*/timeline', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            event_id: 'evt-1',
+            transfer_id: '98812149-5861-4523-ac1b-860d01925c32',
+            event_type: 'PHASE_PREPARE_STARTED',
+            details: { step: 1, reservation: 'pending' },
+            created_at: new Date().toISOString(),
+          },
+          {
+            event_id: 'evt-2',
+            transfer_id: '98812149-5861-4523-ac1b-860d01925c32',
+            event_type: 'DECISION_COMMITTED',
+            details: { decision: 'COMMIT', durable_fsync: true },
+            created_at: new Date().toISOString(),
+          },
+          {
+            event_id: 'evt-3',
+            transfer_id: '98812149-5861-4523-ac1b-860d01925c32',
+            event_type: 'TRANSFER_SETTLED',
+            details: { net_clearing_delta: 0, status: 'SETTLED' },
+            created_at: new Date().toISOString(),
+          },
+        ]),
+      });
+    });
+
     await page.goto('/console/transfers/98812149-5861-4523-ac1b-860d01925c32');
     await page.waitForLoadState('networkidle');
 
@@ -98,10 +129,9 @@ test.describe('Visual & Motion Verification: Scroll Storytelling, Navigation & R
 
     // Expand payload details button
     const payloadToggle = page.locator('button:has-text("Inspect Event Payload")').first();
-    if (await payloadToggle.isVisible()) {
-      await payloadToggle.click();
-      await expect(page.locator('text=Event Payload Details:').first()).toBeVisible();
-    }
+    await expect(payloadToggle).toBeVisible();
+    await payloadToggle.click();
+    await expect(page.locator('text=Event Payload Details:').first()).toBeVisible();
   });
 
   test('Architecture terminology guard: no 5-node, Raft, or consensus claims anywhere in DOM', async ({ page }) => {

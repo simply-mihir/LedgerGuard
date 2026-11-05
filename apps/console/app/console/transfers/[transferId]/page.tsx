@@ -282,17 +282,19 @@ export default function TransferDetailPage() {
 
         <div className="relative pl-8 space-y-6">
           {/* Continuous vertical timeline connector path */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '12px',
-              bottom: '12px',
-              left: '11px',
-              width: '2px',
-              background: 'linear-gradient(to bottom, #38BDF8, #10B981 60%, rgba(255, 255, 255, 0.1))',
-              borderRadius: '1px',
-            }}
-          />
+          {timeline.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '12px',
+                bottom: '12px',
+                left: '11px',
+                width: '2px',
+                background: 'linear-gradient(to bottom, #38BDF8, #10B981 60%, rgba(255, 255, 255, 0.1))',
+                borderRadius: '1px',
+              }}
+            />
+          )}
 
           {timeline.map((evt, idx) => {
             const meta = EVENT_DESCRIPTIONS[evt.event_type] || {
