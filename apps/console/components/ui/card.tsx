@@ -3,7 +3,7 @@ import React from 'react';
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   interactive?: boolean;
-  accent?: 'none' | 'mint' | 'amber' | 'rose' | 'blue';
+  accent?: 'none' | 'mint' | 'amber' | 'rose' | 'blue' | 'cobalt';
 }
 
 export function Card({
@@ -16,23 +16,24 @@ export function Card({
 }: CardProps) {
   const accentBorder = {
     none: 'rgba(255, 255, 255, 0.08)',
-    mint: 'rgba(13, 242, 166, 0.35)',
-    amber: 'rgba(245, 158, 11, 0.35)',
-    rose: 'rgba(244, 63, 94, 0.35)',
-    blue: 'rgba(56, 189, 248, 0.35)',
+    mint: 'rgba(16, 185, 129, 0.30)',
+    amber: 'rgba(245, 158, 11, 0.30)',
+    rose: 'rgba(239, 68, 68, 0.30)',
+    blue: 'rgba(56, 189, 248, 0.30)',
+    cobalt: 'rgba(59, 130, 246, 0.35)',
   }[accent];
 
   return (
     <div
       className={`signal-card ${interactive ? 'signal-card-interactive' : ''} ${className}`}
       style={{
-        background: 'rgba(19, 22, 27, 0.75)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        background: 'rgba(14, 20, 33, 0.76)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         border: `1px solid ${accentBorder}`,
-        borderRadius: '16px',
-        boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3)',
-        transition: 'transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease',
+        borderRadius: 'var(--radius-secondary, 20px)',
+        boxShadow: '0 12px 32px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+        transition: 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, box-shadow 0.22s ease',
         ...style,
       }}
       {...props}

@@ -70,9 +70,9 @@ export function Sheet({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(5, 7, 9, 0.75)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: 'rgba(5, 7, 12, 0.70)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
           animation: 'fade-in 0.2s ease-out',
         }}
       />
@@ -86,9 +86,13 @@ export function Sheet({
           width: '100%',
           maxWidth: width,
           height: '100%',
-          background: '#111418',
-          borderLeft: '1px solid rgba(255, 255, 255, 0.10)',
-          boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.65)',
+          background: 'rgba(11, 15, 25, 0.92)',
+          backdropFilter: 'blur(32px)',
+          WebkitBackdropFilter: 'blur(32px)',
+          borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+          borderTopLeftRadius: 'var(--radius-primary, 28px)',
+          borderBottomLeftRadius: 'var(--radius-primary, 28px)',
+          boxShadow: '-12px 0 48px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 201,
@@ -98,22 +102,23 @@ export function Sheet({
         {/* Header */}
         <div
           style={{
-            padding: '1.25rem 1.5rem',
+            padding: '1.5rem 1.75rem',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'space-between',
             gap: '1rem',
-            background: '#13171d',
+            background: 'rgba(14, 20, 34, 0.85)',
+            borderTopLeftRadius: 'var(--radius-primary, 28px)',
           }}
         >
           <div>
             <h2
               style={{
-                fontSize: '1.125rem',
+                fontSize: '1.1875rem',
                 fontWeight: 700,
-                color: '#f8fafc',
-                letterSpacing: '-0.01em',
+                color: '#F8FAFC',
+                letterSpacing: '-0.02em',
               }}
             >
               {title}
@@ -122,7 +127,7 @@ export function Sheet({
               <div
                 style={{
                   fontSize: '0.8125rem',
-                  color: '#94a3b8',
+                  color: '#94A3B8',
                   marginTop: '0.25rem',
                 }}
               >
@@ -135,17 +140,18 @@ export function Sheet({
             aria-label="Close sheet"
             className="btn-interactive"
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
+              width: '36px',
+              height: '36px',
+              borderRadius: 'var(--radius-control, 14px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.10)',
-              color: '#94a3b8',
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#94A3B8',
               cursor: 'pointer',
               flexShrink: 0,
+              transition: 'all 0.18s ease',
             }}
           >
             ✕
@@ -157,7 +163,7 @@ export function Sheet({
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '1.5rem',
+            padding: '1.75rem',
           }}
         >
           {children}
