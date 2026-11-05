@@ -51,6 +51,8 @@ The core architecture coordinates balance movements across three isolated Postgr
 
 <p align="center">
   <img src="docs/assets/ledgerguard-landing.png" alt="LedgerGuard editorial landing page showcasing 3-database TCC architecture narrative" width="900">
+  <br>
+  <em><a href="docs/assets/ledgerguard-landing-full.png">View full high-resolution scroll narrative capture (1440×10337)</a></em>
 </p>
 
 <p align="center">

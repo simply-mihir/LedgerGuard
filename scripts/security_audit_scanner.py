@@ -137,6 +137,14 @@ def scan_git_authors() -> list[str]:
     return errors
 
 
+EXPECTED_SCREENSHOTS = {
+    "docs/assets/ledgerguard-landing.png",
+    "docs/assets/ledgerguard-landing-full.png",
+    "docs/assets/ledgerguard-overview.png",
+    "docs/assets/ledgerguard-transfer-lifecycle.png",
+}
+
+
 def scan_screenshot_artifacts() -> list[str]:
     """Verify expected screenshots, validate PNG headers, dimensions, and path hygiene.
 
@@ -149,13 +157,8 @@ def scan_screenshot_artifacts() -> list[str]:
     Note: Visual inspection of rendered graphical contents must be performed separately by a human reviewer.
     """
     errors: list[str] = []
-    expected_screenshots = {
-        "docs/assets/ledgerguard-landing.png",
-        "docs/assets/ledgerguard-overview.png",
-        "docs/assets/ledgerguard-transfer-lifecycle.png",
-    }
 
-    for rel_path in sorted(expected_screenshots):
+    for rel_path in sorted(EXPECTED_SCREENSHOTS):
         path = Path(rel_path)
         if not path.is_file():
             errors.append(f"Expected documentation screenshot missing: {rel_path}")
@@ -175,7 +178,7 @@ def scan_screenshot_artifacts() -> list[str]:
             errors.append(f"Local filesystem path found in image chunk metadata: {rel_path}")
 
     actual_images = {str(p) for p in Path("docs/assets").glob("*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")}
-    unexpected = actual_images - expected_screenshots
+    unexpected = actual_images - EXPECTED_SCREENSHOTS
     if unexpected:
         errors.append(f"Unexpected image files found in docs/assets: {unexpected}")
 
@@ -215,7 +218,7 @@ def main() -> None:
     if screenshot_errors:
         all_errors.extend(screenshot_errors)
     else:
-        print("  ✓ Found 3 expected screenshots: valid PNG headers, verified dimensions, zero metadata path leaks.")
+        print(f"  ✓ Found {len(EXPECTED_SCREENSHOTS)} expected screenshots: valid PNG headers, verified dimensions, zero metadata path leaks.")
         print("  ℹ Note: Visual inspection of rendered image contents is performed manually and documented separately.")
 
     print("-------------------------------------------------------------------")
