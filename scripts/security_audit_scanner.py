@@ -12,6 +12,7 @@ Performs static regex and rule-based pattern auditing across:
 from __future__ import annotations
 
 import re
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -136,6 +137,51 @@ def scan_git_authors() -> list[str]:
     return errors
 
 
+def scan_screenshot_artifacts() -> list[str]:
+    """Verify expected screenshots, validate PNG headers, dimensions, and path hygiene.
+
+    Automated checks:
+    - Expected screenshots exist with valid PNG magic bytes.
+    - Dimensions are valid and non-zero.
+    - No obvious local paths exist in metadata/chunks.
+    - No unexpected image files are tracked in docs/assets.
+
+    Note: Visual inspection of rendered graphical contents must be performed separately by a human reviewer.
+    """
+    errors: list[str] = []
+    expected_screenshots = {
+        "docs/assets/ledgerguard-landing.png",
+        "docs/assets/ledgerguard-overview.png",
+        "docs/assets/ledgerguard-transfer-lifecycle.png",
+    }
+
+    for rel_path in sorted(expected_screenshots):
+        path = Path(rel_path)
+        if not path.is_file():
+            errors.append(f"Expected documentation screenshot missing: {rel_path}")
+            continue
+
+        data = path.read_bytes()
+        if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n":
+            errors.append(f"Invalid PNG magic bytes in screenshot: {rel_path}")
+            continue
+
+        width, height = struct.unpack(">II", data[16:24])
+        if width < 800 or height < 300:
+            errors.append(f"Unusually small screenshot dimensions ({width}x{height}) in {rel_path}")
+
+        # Check for local user paths in raw PNG chunk bytes
+        if b"/Users/" in data or b"/home/" in data:
+            errors.append(f"Local filesystem path found in image chunk metadata: {rel_path}")
+
+    actual_images = {str(p) for p in Path("docs/assets").glob("*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")}
+    unexpected = actual_images - expected_screenshots
+    if unexpected:
+        errors.append(f"Unexpected image files found in docs/assets: {unexpected}")
+
+    return errors
+
+
 def main() -> None:
     print("===================================================================")
     print(" LedgerGuard Repository Security, Privacy & Integrity Scanner      ")
@@ -165,8 +211,12 @@ def main() -> None:
         print("  ✓ Commit authors clean: all commits use privacy-protected or authorized emails.")
 
     print("[4/4] Verifying documentation screenshot artifacts...")
-    screenshots = list(Path("docs/assets").glob("*.png"))
-    print(f"  ✓ Found {len(screenshots)} screenshots in docs/assets; verified no credentials displayed.")
+    screenshot_errors = scan_screenshot_artifacts()
+    if screenshot_errors:
+        all_errors.extend(screenshot_errors)
+    else:
+        print("  ✓ Found 3 expected screenshots: valid PNG headers, verified dimensions, zero metadata path leaks.")
+        print("  ℹ Note: Visual inspection of rendered image contents is performed manually and documented separately.")
 
     print("-------------------------------------------------------------------")
     if all_errors:
