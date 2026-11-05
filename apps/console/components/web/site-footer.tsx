@@ -5,15 +5,17 @@ export function SiteFooter() {
   return (
     <footer
       style={{
-        borderTop: '1px solid var(--border-stone)',
-        backgroundColor: 'var(--bg-stone-subtle)',
-        padding: '3.5rem 1.5rem 2.5rem',
+        borderTop: '1px solid rgba(226, 232, 240, 0.8)',
+        background: 'rgba(255, 255, 255, 0.75)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        padding: '4rem 1.5rem 3rem',
         marginTop: 'auto',
       }}
     >
       <div
         style={{
-          maxWidth: '1280px',
+          maxWidth: '1240px',
           margin: '0 auto',
         }}
       >
@@ -30,17 +32,17 @@ export function SiteFooter() {
             <div
               style={{
                 fontFamily: 'var(--font-serif)',
-                fontSize: '1.25rem',
+                fontSize: '1.35rem',
                 fontWeight: 700,
                 color: 'var(--text-ink)',
-                marginBottom: '0.75rem',
+                marginBottom: '0.85rem',
               }}
             >
               LedgerGuard
             </div>
             <p
               style={{
-                fontSize: '0.875rem',
+                fontSize: '0.9375rem',
                 color: 'var(--text-ink-secondary)',
                 lineHeight: 1.6,
                 maxWidth: '360px',
@@ -150,18 +152,18 @@ export function SiteFooter() {
         {/* Bottom Disclaimer */}
         <div
           style={{
-            borderTop: '1px solid var(--border-stone)',
-            paddingTop: '1.5rem',
+            borderTop: '1px solid rgba(226, 232, 240, 0.8)',
+            paddingTop: '1.75rem',
             display: 'flex',
             flexDirection: 'column',
-            gap: '0.5rem',
+            gap: '0.75rem',
             fontSize: '0.75rem',
             color: 'var(--text-ink-muted)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
             <span>© 2026 LedgerGuard. Open-source distributed financial systems engineering.</span>
-            <span>Release v1.0.0 • Python 3.12 • PostgreSQL 17 • Next.js 15</span>
+            <span>Designed and tested against WCAG 2.2 AA criteria • Release v1.0.0</span>
           </div>
           <p style={{ lineHeight: 1.5 }}>
             LedgerGuard is an educational financial ledger implementation and portfolio artifact demonstrating

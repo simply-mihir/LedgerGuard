@@ -1,405 +1,822 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-interface StageInfo {
-  step: number;
-  badge: string;
+interface Stage {
+  number: number;
+  stageName: string;
   title: string;
   description: string;
-  coordinatorState: string;
-  ledger1State: string;
-  ledger2State: string;
-  clearingDelta: string;
+  coordinatorStatus: string;
+  coordinatorDetail: string;
+  ledger1Status: string;
+  ledger1Detail: string;
+  ledger2Status: string;
+  ledger2Detail: string;
+  clearingFormula: string;
   activeEvent: string;
+  isDurableBoundary?: boolean;
 }
 
-const STAGES: StageInfo[] = [
+const NARRATIVE_STAGES: Stage[] = [
   {
-    step: 1,
-    badge: 'Stage 1 — Local ACID Posting',
+    number: 1,
+    stageName: 'Stage 1 — Immutable Local Posting',
     title: 'Atomic Double-Entry Isolation',
     description:
-      'Each participant ledger operates as an independent PostgreSQL 17 failure domain. Journals enforce immutable double-entry constraints where Total Debits equal Total Credits in integer paise. No distributed locks cross database boundaries.',
-    coordinatorState: 'IDLE (Awaiting Transfer Request)',
-    ledger1State: 'ACTIVE: Wallet Alice posted balance ₹1,000.00',
-    ledger2State: 'ACTIVE: Wallet Bob posted balance ₹0.00',
-    clearingDelta: 'Σ ΔL = ₹0.00 (Zero Inter-Ledger Movement)',
+      'Each participant ledger operates as an autonomous PostgreSQL 17 failure domain. Journals enforce immutable double-entry constraints where debits equal credits in integer paise. No distributed locks cross database boundaries.',
+    coordinatorStatus: 'STANDBY',
+    coordinatorDetail: 'Awaiting client transfer request; zero locks held',
+    ledger1Status: 'ACTIVE',
+    ledger1Detail: 'Alice posted balance: ₹1,000.00 • Active holds: ₹0.00',
+    ledger2Status: 'ACTIVE',
+    ledger2Detail: 'Bob posted balance: ₹0.00 • Active holds: ₹0.00',
+    clearingFormula: 'Σ ΔL = ₹0.00 (Zero inter-ledger movement)',
     activeEvent: 'LOCAL_JOURNAL_POSTED',
   },
   {
-    step: 2,
-    badge: 'Stage 2 — TCC Try Phase (Prepare)',
-    title: 'Reservation & Viability Invariant',
+    number: 2,
+    stageName: 'Stage 2 — Source Reservation',
+    title: 'Balance Hold & Double-Spend Prevention',
     description:
-      'The coordinator dispatches Try commands. Ledger 1 reserves ₹300.00 into an isolated balance hold, preventing double-spend without freezing the entire account. Ledger 2 validates destination eligibility and accepts incoming intent.',
-    coordinatorState: 'STATE: PREPARING (Transfer 7a609dcb...)',
-    ledger1State: 'HELD: ₹300.00 reserved in account_holds; Available: ₹700.00',
-    ledger2State: 'INTENT_ACCEPTED: Destination account verified viable',
-    clearingDelta: 'Σ ΔL = ₹0.00 (Funds not yet transferred)',
+      'The coordinator dispatches Try commands. Ledger 1 reserves ₹300.00 into an isolated account hold under sorted row lock, preventing double-spending without freezing Alice’s entire wallet.',
+    coordinatorStatus: 'PREPARING',
+    coordinatorDetail: 'Dispatched source_prepare; timeout watchdog set',
+    ledger1Status: 'HELD',
+    ledger1Detail: '₹300.00 reserved in account_holds; Available: ₹700.00',
+    ledger2Status: 'STANDBY',
+    ledger2Detail: 'Awaiting destination prepare payload',
+    clearingFormula: 'Σ ΔL = ₹0.00 (Funds reserved, not yet moved)',
     activeEvent: 'PHASE_PREPARE_STARTED',
   },
   {
-    step: 3,
-    badge: 'Stage 3 — Durable Decision Boundary',
-    title: 'The Point of No Return',
+    number: 3,
+    stageName: 'Stage 3 — Destination Preparation',
+    title: 'Intent Registration & Viability Check',
     description:
-      'When both participants accept, coordinator atomically records a COMMIT decision in transfer_decisions under row lock. Once logged to disk, the transfer CANNOT be cancelled or rolled back. Even if the coordinator crashes immediately, recovery must drive forward.',
-    coordinatorState: 'DECISION: COMMIT (Durably committed to disk)',
-    ledger1State: 'HELD: Balance hold maintained across outage',
-    ledger2State: 'PENDING: Awaiting confirmation command',
-    clearingDelta: 'Σ ΔL = ₹0.00 (Committed pending settlement)',
-    activeEvent: 'DECISION_MADE & DECISION_COMMITTED',
+      'Ledger 2 validates Bob’s destination account status, registers incoming intent into its command inbox, and confirms viability. If Bob’s account was frozen or closed, cancellation triggers cleanly.',
+    coordinatorStatus: 'PREPARING',
+    coordinatorDetail: 'Received affirmative prepare responses from both ledgers',
+    ledger1Status: 'HELD',
+    ledger1Detail: 'Hold maintained; expires in 60s if unconfirmed',
+    ledger2Status: 'INTENT_ACCEPTED',
+    ledger2Detail: 'Destination account verified active; intent logged',
+    clearingFormula: 'Σ ΔL = ₹0.00 (Two-phase reservation intact)',
+    activeEvent: 'INTENT_ACCEPTED',
   },
   {
-    step: 4,
-    badge: 'Stage 4 — Forward Confirmation Recovery',
-    title: 'Asynchronous Settlement Dispatch',
+    number: 4,
+    stageName: 'Stage 4 — Durable Decision Boundary',
+    title: 'The Irreversible Point of No Return',
     description:
-      'Autonomous worker discovers committed transfer through the transactional outbox. It applies Phase 2 confirmations: Ledger 1 releases the hold and debits Alice; Ledger 2 posts a credit to Bob. Crashes trigger forward replay with idempotent inbox deduplication.',
-    coordinatorState: 'STATE: COMMITTING → SETTLED',
-    ledger1State: 'SETTLED: Hold released; permanent debit ₹300.00 posted',
-    ledger2State: 'SETTLED: Permanent credit ₹300.00 posted to Bob',
-    clearingDelta: 'L1: -₹300.00 • L2: +₹300.00 • Net: ₹0.00',
+      'When both participants accept, coordinator atomically records a COMMIT decision in transfer_decisions under row lock. Once durably committed to disk, the transfer CANNOT be rolled back or cancelled. Even if the coordinator crashes immediately, recovery MUST drive forward.',
+    coordinatorStatus: 'DECISION: COMMIT',
+    coordinatorDetail: 'Durably committed to disk; forward recovery guaranteed',
+    ledger1Status: 'HELD',
+    ledger1Detail: 'Hold preserved across coordinator crash outage',
+    ledger2Status: 'INTENT_ACCEPTED',
+    ledger2Detail: 'Awaiting phase 2 confirmation command',
+    clearingFormula: 'Σ ΔL = ₹0.00 (Committed pending settlement)',
+    activeEvent: 'DECISION_MADE & DECISION_COMMITTED',
+    isDurableBoundary: true,
+  },
+  {
+    number: 5,
+    stageName: 'Stage 5 — Confirmation or Forward Recovery',
+    title: 'Asynchronous Settlement & Outbox Replay',
+    description:
+      'Autonomous workers discover committed transfers via the transactional outbox. Ledger 1 converts the hold into a permanent debit; Ledger 2 posts a permanent credit to Bob. Crashes trigger idempotent replay.',
+    coordinatorStatus: 'COMMITTING → SETTLED',
+    coordinatorDetail: 'Both participant confirmations acknowledged',
+    ledger1Status: 'SETTLED',
+    ledger1Detail: 'Hold released; permanent debit ₹300.00 posted',
+    ledger2Status: 'SETTLED',
+    ledger2Detail: 'Permanent credit ₹300.00 posted to Bob',
+    clearingFormula: 'L1: -₹300.00 • L2: +₹300.00 • Net: ₹0.00',
     activeEvent: 'SOURCE_CONFIRMED & DESTINATION_CONFIRMED',
   },
   {
-    step: 5,
-    badge: 'Stage 5 — Clearing Conservation Audit',
-    title: 'Cross-Ledger Invariant Equivalence',
+    number: 6,
+    stageName: 'Stage 6 — Cross-Ledger Reconciliation',
+    title: 'Net Clearing Invariant Equivalence',
     description:
-      'Post-settlement clearing reconciliation verifies that inter-ledger clearing balances sum to exactly zero paise across databases. The engine verifies conservation after settlement rather than locking distributed tables synchronously.',
-    coordinatorState: 'AUDIT: PASS (0 discrepancies observed)',
-    ledger1State: 'POSTED: ₹700.00 • Clearing A/C: -₹300.00',
-    ledger2State: 'POSTED: ₹300.00 • Clearing A/C: +₹300.00',
-    clearingDelta: 'Σ ΔL = (-30000 + 30000) = ₹0.00 PAIRWISE CONSERVED',
+      'On-demand reconciliation inspects all three databases. It verifies trial balance equality within each ledger and proves that inter-ledger clearing balances sum to exactly zero paise across the entire cluster.',
+    coordinatorStatus: 'AUDIT: PASS',
+    coordinatorDetail: '0 discrepancies observed across 3 databases',
+    ledger1Status: 'RECONCILED',
+    ledger1Detail: 'Alice: ₹700.00 • Clearing A/C: -₹300.00',
+    ledger2Status: 'RECONCILED',
+    ledger2Detail: 'Bob: ₹300.00 • Clearing A/C: +₹300.00',
+    clearingFormula: 'Σ ΔL = (-30000 + 30000) = ₹0.00 PAIRWISE CONSERVED',
     activeEvent: 'TRANSFER_SETTLED',
   },
 ];
 
 export function ArchitectureNarrative() {
   const [activeStep, setActiveStep] = useState(1);
-  const currentStage = STAGES[activeStep - 1];
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+
+    const handleChange = (e: MediaQueryListEvent) => {
+      setPrefersReducedMotion(e.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (prefersReducedMotion) return;
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          if (!scrollContainerRef.current) {
+            ticking = false;
+            return;
+          }
+          const rect = scrollContainerRef.current.getBoundingClientRect();
+          const totalScrollable = rect.height - window.innerHeight;
+          if (totalScrollable <= 0) {
+            ticking = false;
+            return;
+          }
+
+          // Progress from 0 to 1 through the container
+          const rawProgress = -rect.top / totalScrollable;
+          const clamped = Math.max(0, Math.min(1, rawProgress));
+          const stepIndex = Math.min(
+            NARRATIVE_STAGES.length,
+            Math.max(1, Math.floor(clamped * NARRATIVE_STAGES.length) + 1)
+          );
+
+          setActiveStep(stepIndex);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [prefersReducedMotion]);
+
+  const currentStage = NARRATIVE_STAGES[activeStep - 1];
 
   return (
-    <section
-      id="architecture-narrative"
-      style={{
-        padding: '5rem 1.5rem',
-        maxWidth: '1280px',
-        margin: '0 auto',
-      }}
-    >
-      {/* Section Eyebrow & Heading */}
-      <div style={{ maxWidth: '780px', marginBottom: '3.5rem' }}>
+    <section id="narrative" aria-label="TCC Architecture Scroll Narrative">
+      {/* Section Header */}
+      <div
+        style={{
+          maxWidth: '1240px',
+          margin: '0 auto',
+          padding: '6rem 1.5rem 2.5rem',
+          textAlign: 'center',
+        }}
+      >
         <div
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
             fontSize: '0.75rem',
             fontWeight: 700,
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
             color: 'var(--accent-cobalt)',
-            marginBottom: '0.75rem',
+            background: 'rgba(29, 78, 216, 0.08)',
+            padding: '0.35rem 0.85rem',
+            borderRadius: 'var(--radius-pill, 9999px)',
+            border: '1px solid rgba(29, 78, 216, 0.18)',
+            marginBottom: '1.25rem',
           }}
         >
-          Operational Architecture
+          <span>●</span>
+          <span>Apple-Style Architectural Narrative</span>
         </div>
+
         <h2
           style={{
             fontFamily: 'var(--font-serif)',
-            fontSize: 'clamp(2rem, 3.5vw, 2.75rem)',
+            fontSize: 'clamp(2rem, 4vw, 3.25rem)',
             fontWeight: 700,
             lineHeight: 1.15,
-            letterSpacing: '-0.025em',
+            letterSpacing: '-0.02em',
             color: 'var(--text-ink)',
             marginBottom: '1rem',
           }}
         >
-          Five-stage Try-Confirm-Cancel lifecycle across independent databases.
+          The Six-Stage Distributed Transfer Protocol
         </h2>
+
         <p
           style={{
-            fontSize: '1.0625rem',
+            fontSize: '1.125rem',
             color: 'var(--text-ink-secondary)',
-            lineHeight: 1.65,
+            maxWidth: '680px',
+            margin: '0 auto',
+            lineHeight: 1.6,
           }}
         >
-          LedgerGuard eliminates classical two-phase commit (2PC) distributed locks. Instead, it coordinates
-          balance reservations through durable local transactions, an immutable decision boundary, and
-          autonomous forward recovery.
+          Follow the lifecycle of an autonomous Try-Confirm-Cancel transaction across three isolated PostgreSQL 17
+          storage engines, from localized isolation to net clearing conservation.
         </p>
       </div>
 
-      {/* Interactive Two-Column Narrative Layout */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '3rem',
-          alignItems: 'start',
-        }}
-      >
-        {/* Left Column: Stage Selector Cards */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {STAGES.map((s) => {
-            const isSelected = s.step === activeStep;
-            return (
-              <button
-                key={s.step}
-                type="button"
-                onClick={() => setActiveStep(s.step)}
+      {/* Narrative Stage Container: Desktop Sticky Storytelling vs Reduced Motion / Mobile */}
+      {prefersReducedMotion ? (
+        // Reduced Motion Mode: Immediate static presentation of all 6 stages
+        <div
+          style={{
+            maxWidth: '1240px',
+            margin: '0 auto',
+            padding: '2rem 1.5rem 6rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2.5rem',
+          }}
+        >
+          {NARRATIVE_STAGES.map((stage) => (
+            <div
+              key={stage.number}
+              className="glass-supporting"
+              style={{
+                borderRadius: 'var(--radius-primary, 28px)',
+                padding: '2.5rem',
+                border: stage.isDurableBoundary
+                  ? '2px solid rgba(217, 119, 6, 0.5)'
+                  : '1px solid rgba(226, 232, 240, 0.8)',
+                background: stage.isDurableBoundary ? 'rgba(254, 243, 199, 0.4)' : 'rgba(255, 255, 255, 0.8)',
+              }}
+            >
+              <div
                 style={{
-                  textAlign: 'left',
-                  padding: '1.5rem',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: isSelected ? 'var(--bg-paper)' : 'transparent',
-                  border: `1px solid ${isSelected ? 'var(--accent-cobalt)' : 'var(--border-stone)'}`,
-                  boxShadow: isSelected ? 'var(--shadow-card)' : 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  position: 'relative',
+                  display: 'inline-block',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  color: stage.isDurableBoundary ? 'var(--status-warning)' : 'var(--accent-cobalt)',
+                  marginBottom: '0.5rem',
+                  textTransform: 'uppercase',
                 }}
               >
-                {isSelected && (
+                {stage.stageName}
+              </div>
+              <h3
+                style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 700,
+                  marginBottom: '1rem',
+                  color: 'var(--text-ink)',
+                }}
+              >
+                {stage.title}
+              </h3>
+              <p
+                style={{
+                  fontSize: '1.0625rem',
+                  color: 'var(--text-ink-secondary)',
+                  lineHeight: 1.6,
+                  marginBottom: '1.5rem',
+                }}
+              >
+                {stage.description}
+              </p>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: '1rem',
+                  padding: '1.25rem',
+                  borderRadius: 'var(--radius-secondary, 20px)',
+                  background: 'rgba(11, 15, 25, 0.9)',
+                  color: '#F1F5F9',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Coordinator DB (:5442)</div>
+                  <div style={{ fontWeight: 600, marginTop: '0.25rem' }}>{stage.coordinatorStatus}</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#CBD5E1' }}>{stage.coordinatorDetail}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Participant Ledger 1 (:5443)</div>
+                  <div style={{ fontWeight: 600, marginTop: '0.25rem' }}>{stage.ledger1Status}</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#CBD5E1' }}>{stage.ledger1Detail}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Participant Ledger 2 (:5444)</div>
+                  <div style={{ fontWeight: 600, marginTop: '0.25rem' }}>{stage.ledger2Status}</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#CBD5E1' }}>{stage.ledger2Detail}</div>
+                </div>
+              </div>
+              <div
+                style={{
+                  marginTop: '1rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: stage.isDurableBoundary ? '#B45309' : 'var(--accent-cobalt)',
+                }}
+              >
+                Invariant Guarantee: {stage.clearingFormula}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        // Cinematic Scroll Narrative Track
+        <div
+          ref={scrollContainerRef}
+          style={{
+            position: 'relative',
+            height: '380vh',
+            maxWidth: '1240px',
+            margin: '0 auto',
+            padding: '0 1.5rem',
+          }}
+        >
+          {/* Sticky Pinned Presentation Deck */}
+          <div
+            style={{
+              position: 'sticky',
+              top: '5.5rem',
+              height: 'calc(100vh - 7rem)',
+              maxHeight: '740px',
+              display: 'grid',
+              gridTemplateColumns: 'minmax(320px, 1fr) minmax(360px, 1.25fr)',
+              gap: '2.5rem',
+              alignItems: 'stretch',
+            }}
+            className="md:grid hidden"
+          >
+            {/* Left Narrative Stepper Panel */}
+            <div
+              className="glass-supporting"
+              style={{
+                borderRadius: 'var(--radius-primary, 28px)',
+                padding: '2.5rem',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                background: currentStage.isDurableBoundary
+                  ? 'rgba(255, 251, 235, 0.85)'
+                  : 'rgba(255, 255, 255, 0.78)',
+                border: currentStage.isDurableBoundary
+                  ? '1.5px solid rgba(245, 158, 11, 0.4)'
+                  : '1px solid rgba(255, 255, 255, 0.65)',
+                boxShadow: '0 20px 48px -12px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.8) inset',
+                transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            >
+              <div>
+                {/* Step indicator bar */}
+                <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '2rem' }}>
+                  {NARRATIVE_STAGES.map((s) => (
+                    <button
+                      key={s.number}
+                      type="button"
+                      onClick={() => setActiveStep(s.number)}
+                      aria-label={`Jump to stage ${s.number}: ${s.title}`}
+                      style={{
+                        flex: 1,
+                        height: '5px',
+                        borderRadius: 'var(--radius-pill, 9999px)',
+                        background:
+                          s.number === activeStep
+                            ? s.isDurableBoundary
+                              ? 'var(--status-warning)'
+                              : 'var(--accent-cobalt)'
+                            : s.number < activeStep
+                            ? 'rgba(29, 78, 216, 0.35)'
+                            : 'rgba(226, 232, 240, 0.8)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.25s ease',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Stage Pill */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    color: currentStage.isDurableBoundary ? '#D97706' : 'var(--accent-cobalt)',
+                    background: currentStage.isDurableBoundary
+                      ? 'rgba(245, 158, 11, 0.12)'
+                      : 'rgba(29, 78, 216, 0.08)',
+                    padding: '0.35rem 0.85rem',
+                    borderRadius: 'var(--radius-pill, 9999px)',
+                    border: `1px solid ${
+                      currentStage.isDurableBoundary ? 'rgba(245, 158, 11, 0.3)' : 'rgba(29, 78, 216, 0.2)'
+                    }`,
+                    marginBottom: '1.25rem',
+                  }}
+                >
+                  <span>●</span>
+                  <span>{currentStage.stageName}</span>
+                </div>
+
+                {/* Stage Title */}
+                <h3
+                  style={{
+                    fontFamily: 'var(--font-serif)',
+                    fontSize: '2rem',
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    letterSpacing: '-0.02em',
+                    color: 'var(--text-ink)',
+                    marginBottom: '1.25rem',
+                  }}
+                >
+                  {currentStage.title}
+                </h3>
+
+                {/* Stage Description */}
+                <p
+                  style={{
+                    fontSize: '1.0625rem',
+                    color: 'var(--text-ink-secondary)',
+                    lineHeight: 1.65,
+                    marginBottom: '1.75rem',
+                  }}
+                >
+                  {currentStage.description}
+                </p>
+
+                {/* Durable Boundary Prominent Callout */}
+                {currentStage.isDurableBoundary && (
                   <div
                     style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: '4px',
-                      backgroundColor: 'var(--accent-cobalt)',
-                      borderRadius: 'var(--radius-sm) 0 0 var(--radius-sm)',
+                      background: 'rgba(245, 158, 11, 0.12)',
+                      border: '1px solid rgba(245, 158, 11, 0.35)',
+                      borderRadius: 'var(--radius-secondary, 20px)',
+                      padding: '1rem 1.25rem',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.75rem',
+                      marginBottom: '1.5rem',
                     }}
-                  />
+                  >
+                    <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+                    <div>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#B45309' }}>
+                        DURABLE DECISION BOUNDARY: THE POINT OF NO RETURN
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#92400E', marginTop: '0.2rem', lineHeight: 1.4 }}>
+                        Once logged to disk under row lock, this decision is irreversible. Outbox workers recover
+                        forward across crashes; funds are never refunded to sender.
+                      </div>
+                    </div>
+                  </div>
                 )}
+              </div>
+
+              {/* Invariant Footer */}
+              <div
+                style={{
+                  padding: '1rem 1.25rem',
+                  borderRadius: 'var(--radius-secondary, 20px)',
+                  background: 'rgba(241, 245, 249, 0.7)',
+                  border: '1px solid rgba(226, 232, 240, 0.8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-ink-muted)', textTransform: 'uppercase' }}>
+                    Active Invariant Verification
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-ink)', marginTop: '0.15rem' }}>
+                    {currentStage.clearingFormula}
+                  </div>
+                </div>
                 <div
                   style={{
                     fontSize: '0.6875rem',
                     fontWeight: 700,
+                    padding: '0.25rem 0.6rem',
+                    borderRadius: 'var(--radius-pill, 9999px)',
+                    background: 'rgba(5, 150, 105, 0.12)',
+                    color: 'var(--status-success)',
+                    border: '1px solid rgba(5, 150, 105, 0.25)',
+                  }}
+                >
+                  CONSERVED
+                </div>
+              </div>
+            </div>
+
+            {/* Right Live Operational Simulation Stage */}
+            <div
+              className="dark-operational-field"
+              style={{
+                borderRadius: 'var(--radius-primary, 28px)',
+                border: '1px solid var(--border-operational-strong)',
+                boxShadow: 'var(--shadow-operational)',
+                padding: '2.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Header Telemetry */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  paddingBottom: '1.25rem',
+                  zIndex: 2,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div
+                    style={{
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      background: currentStage.isDurableBoundary ? '#F59E0B' : '#10B981',
+                      boxShadow: currentStage.isDurableBoundary
+                        ? '0 0 12px #F59E0B'
+                        : '0 0 12px #10B981',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.04em', color: '#F1F5F9' }}>
+                    3-NODE POSTGRESQL 17 CLUSTER
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.75rem',
+                    color: '#94A3B8',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '0.25rem 0.6rem',
+                    borderRadius: 'var(--radius-pill, 9999px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  EVENT: {currentStage.activeEvent}
+                </div>
+              </div>
+
+              {/* Triad Topology Visualization */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem',
+                  margin: '1.5rem 0',
+                  zIndex: 2,
+                }}
+              >
+                {/* Node 1: Coordinator DB */}
+                <div
+                  style={{
+                    background: 'rgba(14, 20, 34, 0.75)',
+                    backdropFilter: 'blur(16px)',
+                    border: currentStage.number >= 4
+                      ? '1px solid rgba(59, 130, 246, 0.45)'
+                      : '1px solid rgba(255, 255, 255, 0.10)',
+                    borderRadius: 'var(--radius-secondary, 20px)',
+                    padding: '1.25rem 1.5rem',
+                    boxShadow: currentStage.number >= 4
+                      ? '0 8px 24px rgba(29, 78, 216, 0.25)'
+                      : 'none',
+                    transition: 'all 0.3s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <span style={{ fontSize: '1.1rem' }}>🏛️</span>
+                      <div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#F8FAFC' }}>
+                          Coordinator Service & Directory
+                        </div>
+                        <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#94A3B8' }}>
+                          Port :5442 • coordinator_db
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: 'var(--radius-pill, 9999px)',
+                        background: currentStage.isDurableBoundary
+                          ? 'rgba(245, 158, 11, 0.2)'
+                          : 'rgba(59, 130, 246, 0.2)',
+                        color: currentStage.isDurableBoundary ? '#FCD34D' : '#60A5FA',
+                        border: `1px solid ${
+                          currentStage.isDurableBoundary
+                            ? 'rgba(245, 158, 11, 0.4)'
+                            : 'rgba(59, 130, 246, 0.4)'
+                        }`,
+                      }}
+                    >
+                      {currentStage.coordinatorStatus}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: '0.6rem',
+                      fontSize: '0.8125rem',
+                      color: '#CBD5E1',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                      paddingTop: '0.6rem',
+                    }}
+                  >
+                    {currentStage.coordinatorDetail}
+                  </div>
+                </div>
+
+                {/* Animated Flow Connecting Arrows */}
+                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '0 2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#60A5FA', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                    <span>↓ TCC Phase 1 / 2</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#38BDF8', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                    <span>↓ TCC Phase 1 / 2</span>
+                  </div>
+                </div>
+
+                {/* Bottom Row: Participant Ledgers */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  {/* Ledger 1 */}
+                  <div
+                    style={{
+                      background: 'rgba(14, 20, 34, 0.75)',
+                      backdropFilter: 'blur(16px)',
+                      border: currentStage.number >= 2
+                        ? '1px solid rgba(56, 189, 248, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.10)',
+                      borderRadius: 'var(--radius-secondary, 20px)',
+                      padding: '1.25rem',
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#F8FAFC' }}>
+                        Participant Ledger 1
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: 'var(--radius-pill, 9999px)',
+                          background: currentStage.number === 2 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                          color: currentStage.number === 2 ? '#FCD34D' : '#34D399',
+                        }}
+                      >
+                        {currentStage.ledger1Status}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', color: '#94A3B8', marginBottom: '0.5rem' }}>
+                      Port :5443 • Alice Wallet
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#E2E8F0', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.5rem' }}>
+                      {currentStage.ledger1Detail}
+                    </div>
+                  </div>
+
+                  {/* Ledger 2 */}
+                  <div
+                    style={{
+                      background: 'rgba(14, 20, 34, 0.75)',
+                      backdropFilter: 'blur(16px)',
+                      border: currentStage.number >= 3
+                        ? '1px solid rgba(56, 189, 248, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.10)',
+                      borderRadius: 'var(--radius-secondary, 20px)',
+                      padding: '1.25rem',
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#F8FAFC' }}>
+                        Participant Ledger 2
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: 'var(--radius-pill, 9999px)',
+                          background: 'rgba(56, 189, 248, 0.2)',
+                          color: '#38BDF8',
+                        }}
+                      >
+                        {currentStage.ledger2Status}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', color: '#94A3B8', marginBottom: '0.5rem' }}>
+                      Port :5444 • Bob Wallet
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#E2E8F0', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.5rem' }}>
+                      {currentStage.ledger2Detail}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Invariant Calculation Pill */}
+              <div
+                style={{
+                  background: 'rgba(0, 0, 0, 0.45)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: 'var(--radius-control, 14px)',
+                  padding: '0.875rem 1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  zIndex: 2,
+                }}
+              >
+                <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+                  Clearing Invariant State:
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 700,
+                    color: '#34D399',
+                  }}
+                >
+                  {currentStage.clearingFormula}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Natural Scrolling Stack */}
+          <div className="md:hidden flex flex-col gap-6" style={{ marginTop: '2rem' }}>
+            {NARRATIVE_STAGES.map((s) => (
+              <div
+                key={s.number}
+                className="glass-supporting"
+                style={{
+                  borderRadius: 'var(--radius-primary, 28px)',
+                  padding: '1.75rem',
+                  border: s.isDurableBoundary
+                    ? '1.5px solid rgba(245, 158, 11, 0.4)'
+                    : '1px solid rgba(226, 232, 240, 0.8)',
+                  background: s.isDurableBoundary ? 'rgba(255, 251, 235, 0.8)' : 'rgba(255, 255, 255, 0.85)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    color: s.isDurableBoundary ? '#D97706' : 'var(--accent-cobalt)',
                     textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    color: isSelected ? 'var(--accent-cobalt)' : 'var(--text-ink-muted)',
                     marginBottom: '0.35rem',
                   }}
                 >
-                  {s.badge}
+                  {s.stageName}
                 </div>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: '1.25rem',
-                    fontWeight: 700,
-                    color: 'var(--text-ink)',
-                    marginBottom: '0.5rem',
-                  }}
-                >
+                <h4 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-ink)', marginBottom: '0.75rem' }}>
                   {s.title}
-                </div>
-                <p
-                  style={{
-                    fontSize: '0.875rem',
-                    color: 'var(--text-ink-secondary)',
-                    lineHeight: 1.55,
-                  }}
-                >
+                </h4>
+                <p style={{ fontSize: '0.9375rem', color: 'var(--text-ink-secondary)', lineHeight: 1.55, marginBottom: '1rem' }}>
                   {s.description}
                 </p>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right Column: Sticky Dark Operational Topology Stage */}
-        <div
-          className="sticky-stage-panel dark-operational-workspace"
-          style={{
-            padding: '2rem',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-operational)',
-          }}
-        >
-          {/* Header Bar */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderBottom: '1px solid var(--border-operational)',
-              paddingBottom: '1rem',
-              marginBottom: '1.5rem',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--text-operational-muted)', letterSpacing: '0.06em' }}>
-                LIVE RUNTIME TOPOLOGY (STAGE {currentStage.step}/5)
-              </div>
-              <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-operational)' }}>
-                Three Independently Reachable PostgreSQL Instances
-              </div>
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.6875rem',
-                padding: '0.25rem 0.5rem',
-                borderRadius: 'var(--radius-xs)',
-                backgroundColor: 'rgba(29, 78, 216, 0.2)',
-                color: 'var(--accent-cobalt-light)',
-                border: '1px solid rgba(29, 78, 216, 0.4)',
-              }}
-            >
-              {currentStage.activeEvent}
-            </div>
-          </div>
-
-          {/* Triad Nodes Visualization */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* Coordinator Node */}
-            <div
-              className="dark-operational-panel"
-              style={{
-                padding: '1.25rem',
-                borderLeft: '3px solid var(--accent-cobalt-light)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#FFFFFF' }}>
-                  Coordinator Database
-                </span>
-                <span className="font-mono" style={{ fontSize: '0.6875rem', color: 'var(--text-operational-muted)' }}>
-                  PORT :5442
-                </span>
-              </div>
-              <div
-                className="font-mono"
-                style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-operational-secondary)',
-                  backgroundColor: 'rgba(0, 0, 0, 0.35)',
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: 'var(--radius-xs)',
-                  border: '1px solid var(--border-operational)',
-                }}
-              >
-                {currentStage.coordinatorState}
-              </div>
-            </div>
-
-            {/* Invariant Transmission Vectors */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '1rem',
-                fontSize: '0.75rem',
-                color: 'var(--text-operational-muted)',
-              }}
-            >
-              <span>↓ TCC Dispatch</span>
-              <span className="font-mono" style={{ color: 'var(--accent-cobalt-light)' }}>
-                Transactional Outbox / Inbox
-              </span>
-              <span>↓ Durable Replay</span>
-            </div>
-
-            {/* Participant Ledgers Grid */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '1rem',
-              }}
-            >
-              {/* Participant Ledger 1 */}
-              <div
-                className="dark-operational-panel"
-                style={{
-                  padding: '1.25rem',
-                  borderTop: '2px solid var(--status-success-dark)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#FFFFFF' }}>
-                    Ledger 1 (Source)
-                  </span>
-                  <span className="font-mono" style={{ fontSize: '0.6875rem', color: 'var(--text-operational-muted)' }}>
-                    :5443
-                  </span>
-                </div>
                 <div
-                  className="font-mono"
                   style={{
-                    fontSize: '0.6875rem',
-                    color: 'var(--text-operational-secondary)',
-                    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-                    padding: '0.5rem',
-                    borderRadius: 'var(--radius-xs)',
-                    minHeight: '4.5rem',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: s.isDurableBoundary ? '#B45309' : 'var(--accent-cobalt)',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: 'var(--radius-sm, 10px)',
+                    background: 'rgba(0, 0, 0, 0.04)',
                   }}
                 >
-                  {currentStage.ledger1State}
+                  {s.clearingFormula}
                 </div>
               </div>
-
-              {/* Participant Ledger 2 */}
-              <div
-                className="dark-operational-panel"
-                style={{
-                  padding: '1.25rem',
-                  borderTop: '2px solid var(--status-success-dark)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#FFFFFF' }}>
-                    Ledger 2 (Dest)
-                  </span>
-                  <span className="font-mono" style={{ fontSize: '0.6875rem', color: 'var(--text-operational-muted)' }}>
-                    :5444
-                  </span>
-                </div>
-                <div
-                  className="font-mono"
-                  style={{
-                    fontSize: '0.6875rem',
-                    color: 'var(--text-operational-secondary)',
-                    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-                    padding: '0.5rem',
-                    borderRadius: 'var(--radius-xs)',
-                    minHeight: '4.5rem',
-                  }}
-                >
-                  {currentStage.ledger2State}
-                </div>
-              </div>
-            </div>
-
-            {/* Clearing Equivalence Monitor */}
-            <div
-              style={{
-                backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                border: '1px solid rgba(16, 185, 129, 0.25)',
-                borderRadius: 'var(--radius-xs)',
-                padding: '0.75rem 1rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'var(--status-success-dark)', fontSize: '0.875rem' }}>●</span>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#FFFFFF' }}>
-                  Clearing Invariant
-                </span>
-              </div>
-              <div className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--status-success-dark)', fontWeight: 600 }}>
-                {currentStage.clearingDelta}
-              </div>
-            </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
