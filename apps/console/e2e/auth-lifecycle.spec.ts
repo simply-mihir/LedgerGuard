@@ -235,6 +235,35 @@ test.describe('Real Browser E2E: Authentication & Security Lifecycle', () => {
     await page.waitForURL(/\/login\?returnUrl=%2Fconsole/);
   });
 
+  test('Expired/revoked session behavior rejects access and redirects to /login', async ({ page, context }) => {
+    const op = provisionSyntheticOperator({ enableTotp: false });
+
+    await page.goto('/login');
+    await page.fill('#operator-identifier', op.username);
+    await page.fill('#operator-password', op.password);
+    await page.click('button[type="submit"]');
+    await page.waitForURL(/\/console/);
+
+    // Overwrite the session cookie with an invalid/expired session token
+    const urlObj = new URL(page.url());
+    await context.addCookies([
+      {
+        name: 'ledgerguard_session',
+        value: 'revoked_or_expired_synthetic_session_token_12345',
+        domain: urlObj.hostname,
+        path: '/',
+        httpOnly: true,
+        sameSite: 'Lax',
+      },
+    ]);
+
+    // Attempting to navigate to /console with expired/revoked session redirects to /login
+    await page.goto('/console');
+    await page.waitForURL(/\/login\?returnUrl=%2Fconsole/);
+    await expect(page.locator('#operator-identifier')).toBeVisible();
+    expect(page.url()).toContain('/login?returnUrl=%2Fconsole');
+  });
+
   test('CSRF rejection for state-changing requests', async ({ page }) => {
     const op = provisionSyntheticOperator({ enableTotp: false });
 
