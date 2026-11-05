@@ -367,10 +367,12 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 72 passing tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 74 passing tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
-- **Type Checking:** Zero Mypy type violations (`uv run mypy src`)
-- **Frontend Test Suite:** 45 passing tests across 18 suites (`npm test` in `apps/console`)
+- **Type Checking:** Zero Mypy type violations across 35 source files (`uv run mypy src`)
+- **Frontend Unit Suite:** 45 passing tests across 18 suites (`npm test` in `apps/console`)
+- **Real Browser E2E Suite:** 72 passing tests across Chromium, Firefox, and WebKit (`npx playwright test` in `apps/console`)
+- **Rendered Accessibility:** 0 critical/serious Axe violations; tested against WCAG 2.2 AA criteria (`@axe-core/playwright`)
 - **Console Build:** Clean Next.js 15 production build (`npm run build`)
 - **Production Vulnerabilities:** Zero known production vulnerabilities detected (`npm audit --omit=dev` and `pip-audit`)
 - **Signature Recovery Demo:** 8/8 steps and 15/15 checkpoints passing (`./scripts/demo_signature_recovery.sh`)
@@ -422,11 +424,11 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) | 11 | TCC-style failure matrix: lost prepare replies, crash after `COMMIT`, crash between confirms, frozen/closed account rejections, idempotency retries. |
 | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) | 4 | Multi-database reachability probing, corrupted hold cache detection, stopped-and-drained full cluster audit. |
 | [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
-| [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 14 | Argon2id verification, SHA-256 session token hashing, idle & absolute expiry, TOTP drift & replay rejection, source-based rate limiting, CSRF and origin validation. |
+| [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 16 | Argon2id verification, SHA-256 session token hashing, idle & absolute expiry, TOTP drift & replay rejection, source-based rate limiting, CSRF and origin validation, proxy security. |
 | [`tests/test_auth_permissions.py`](tests/test_auth_permissions.py) | 2 | PostgreSQL role boundary enforcement: reporter role denied SELECT on auth tables; app role denied DELETE on operators and UPDATE on login attempts. |
 | [`tests/test_reference_model.py`](tests/test_reference_model.py) | 1 | Hypothesis stateful property tests comparing concurrent multi-account execution against an in-memory reference model. |
 | [`tests/test_smoke.py`](tests/test_smoke.py) | 5 | Live PostgreSQL 17 connectivity, migration tracking tables, application connection role boundary enforcement. |
-| **Total** | **72** | **100% Passing** |
+| **Total** | **74** | **100% Passing** |
 
 ---
 
