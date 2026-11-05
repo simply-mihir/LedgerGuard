@@ -54,16 +54,16 @@ export default function TransfersPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Editorial Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-[#1E293B]">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-white/[0.08]">
         <div>
           <div className="inline-flex items-center gap-2 font-mono text-[11px] text-[#38BDF8] uppercase tracking-wider mb-2">
-            <span className="w-1.5 h-1.5 bg-[#38BDF8]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#38BDF8] shadow-[0_0_8px_rgba(56,189,248,0.6)]" />
             Distributed Coordination Engine
           </div>
           <h1 className="text-3xl md:text-4xl font-serif text-[#F8FAFC] font-normal tracking-tight">
             Try-Confirm-Cancel Transfers
           </h1>
-          <p className="text-xs text-[#94A3B8] max-w-2xl mt-1">
+          <p className="text-xs text-[#94A3B8] max-w-2xl mt-1 leading-relaxed">
             Application-level 3-phase TCC lifecycle. Source funds are reserved via temporary holds, destination accounts are prepared, a durable COMMIT decision is logged, and outbox workers asynchronously confirm or recover.
           </p>
         </div>
@@ -71,15 +71,43 @@ export default function TransfersPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/console/experiments"
-            className="px-4 py-2 bg-[#1E293B] hover:bg-[#334155] text-white text-xs font-mono uppercase tracking-wider transition-colors no-underline"
+            style={{
+              padding: '0.625rem 1.25rem',
+              borderRadius: 'var(--radius-control, 14px)',
+              background: 'rgba(29, 78, 216, 0.8)',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              color: '#FFFFFF',
+              fontSize: '0.75rem',
+              fontFamily: 'var(--font-mono)',
+              textDecoration: 'none',
+              fontWeight: 600,
+              boxShadow: '0 4px 16px rgba(29, 78, 216, 0.3)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s ease',
+            }}
           >
-            Inject Failure &rarr;
+            <span>Inject Failure Scenario</span>
+            <span>→</span>
           </Link>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-[#7F1D1D]/30 border-l-2 border-[#DC2626] text-xs text-[#FCA5A5] flex items-center justify-between">
+        <div
+          style={{
+            padding: '1rem 1.25rem',
+            borderRadius: 'var(--radius-control, 14px)',
+            background: 'rgba(127, 29, 29, 0.3)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            color: '#FCA5A5',
+            fontSize: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
           <span>Failed to load transfers: {error}</span>
           <button onClick={loadData} className="font-mono underline bg-transparent border-0 text-inherit cursor-pointer">
             Retry
@@ -88,14 +116,39 @@ export default function TransfersPage() {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="p-4 bg-[#0F172A] border border-[#1E293B] flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
+      <div
+        style={{
+          padding: '1rem 1.25rem',
+          borderRadius: 'var(--radius-secondary, 20px)',
+          background: 'rgba(15, 23, 42, 0.7)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 12px 30px -10px rgba(0, 0, 0, 0.4)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+        }}
+        className="md:flex-row md:items-center md:justify-between"
+      >
         <div className="flex-1 max-w-md">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by Transfer ID or Account ID..."
-            className="w-full bg-[#0B0F17] border border-[#1E293B] px-3.5 py-2 text-xs font-mono text-white placeholder:text-[#64748B] focus:outline-none focus:border-[#1D4ED8]"
+            style={{
+              width: '100%',
+              background: 'rgba(11, 15, 23, 0.8)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 'var(--radius-control, 14px)',
+              padding: '0.625rem 1rem',
+              fontSize: '0.75rem',
+              fontFamily: 'var(--font-mono)',
+              color: '#F8FAFC',
+              outline: 'none',
+              transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+            }}
           />
         </div>
 
@@ -103,25 +156,41 @@ export default function TransfersPage() {
           {/* Attention toggle */}
           <button
             onClick={() => setAttentionOnly(!attentionOnly)}
-            className={`px-3 py-1 text-[11px] font-mono border-0 cursor-pointer ${
-              attentionOnly ? 'bg-[#F59E0B] text-black font-bold' : 'bg-[#0B0F17] text-[#94A3B8] hover:bg-[#1E293B]'
-            }`}
+            style={{
+              padding: '0.35rem 0.75rem',
+              fontSize: '0.6875rem',
+              borderRadius: 'var(--radius-pill, 9999px)',
+              fontFamily: 'var(--font-mono)',
+              cursor: 'pointer',
+              border: attentionOnly ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.06)',
+              backgroundColor: attentionOnly ? 'rgba(245, 158, 11, 0.2)' : 'rgba(11, 15, 23, 0.6)',
+              color: attentionOnly ? '#F59E0B' : '#94A3B8',
+              fontWeight: attentionOnly ? 700 : 400,
+              transition: 'all 0.18s ease',
+            }}
           >
             {attentionOnly ? '⚠ Attention Required Only' : 'Show All'}
           </button>
 
           {/* Route filter */}
           <div className="flex items-center gap-1 font-mono text-xs">
-            <span className="text-[#64748B] text-[11px] uppercase mr-1">Route:</span>
+            <span className="text-[#94A3B8] text-[11px] uppercase mr-1">Route:</span>
             {(['ALL', 'L1_TO_L2', 'L2_TO_L1'] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setSelectedRoute(r)}
-                className={`px-2.5 py-1 text-[11px] border-0 cursor-pointer font-mono ${
-                  selectedRoute === r
-                    ? 'bg-[#1D4ED8] text-white font-semibold'
-                    : 'bg-[#0B0F17] text-[#94A3B8] hover:bg-[#1E293B]'
-                }`}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.6875rem',
+                  borderRadius: 'var(--radius-pill, 9999px)',
+                  fontFamily: 'var(--font-mono)',
+                  cursor: 'pointer',
+                  border: selectedRoute === r ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)',
+                  backgroundColor: selectedRoute === r ? 'rgba(29, 78, 216, 0.8)' : 'rgba(11, 15, 23, 0.6)',
+                  color: selectedRoute === r ? '#FFFFFF' : '#94A3B8',
+                  fontWeight: selectedRoute === r ? 600 : 400,
+                  transition: 'all 0.18s ease',
+                }}
               >
                 {r === 'ALL' ? 'All Routes' : r === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'}
               </button>
@@ -130,16 +199,23 @@ export default function TransfersPage() {
 
           {/* State filter */}
           <div className="flex items-center gap-1 font-mono text-xs">
-            <span className="text-[#64748B] text-[11px] uppercase mr-1">State:</span>
+            <span className="text-[#94A3B8] text-[11px] uppercase mr-1">State:</span>
             {(['ALL', 'SETTLED', 'CANCELLED', 'COMMITTED', 'PREPARING'] as const).map((st) => (
               <button
                 key={st}
                 onClick={() => setSelectedState(st)}
-                className={`px-2.5 py-1 text-[11px] border-0 cursor-pointer font-mono ${
-                  selectedState === st
-                    ? 'bg-[#1D4ED8] text-white font-semibold'
-                    : 'bg-[#0B0F17] text-[#94A3B8] hover:bg-[#1E293B]'
-                }`}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.6875rem',
+                  borderRadius: 'var(--radius-pill, 9999px)',
+                  fontFamily: 'var(--font-mono)',
+                  cursor: 'pointer',
+                  border: selectedState === st ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)',
+                  backgroundColor: selectedState === st ? 'rgba(29, 78, 216, 0.8)' : 'rgba(11, 15, 23, 0.6)',
+                  color: selectedState === st ? '#FFFFFF' : '#94A3B8',
+                  fontWeight: selectedState === st ? 600 : 400,
+                  transition: 'all 0.18s ease',
+                }}
               >
                 {st}
               </button>
@@ -148,86 +224,138 @@ export default function TransfersPage() {
         </div>
       </div>
 
-      {/* Dense Transfers Table */}
-      <div className="bg-[#0F172A] border border-[#1E293B] overflow-x-auto">
-        <table className="w-full text-left text-xs font-mono">
-          <thead>
-            <tr className="text-[#64748B] border-b border-[#1E293B] bg-[#0B0F17]">
-              <th className="py-3 px-4 font-medium">Transfer ID</th>
-              <th className="py-3 px-4 font-medium">Amount</th>
-              <th className="py-3 px-4 font-medium">Route</th>
-              <th className="py-3 px-4 font-medium">Durable Decision</th>
-              <th className="py-3 px-4 font-medium">Workflow State</th>
-              <th className="py-3 px-4 font-medium">Created Timestamp</th>
-              <th className="py-3 px-4 font-medium text-right">TCC Lifecycle</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#1E293B] text-[#CBD5E1]">
-            {filteredTransfers.map((tx) => (
-              <tr key={tx.transfer_id} className="hover:bg-[#1E293B]/40 transition-colors">
-                <td className="py-3 px-4 font-semibold text-white">
-                  <Link
-                    href={`/console/transfers/${tx.transfer_id}`}
-                    className="text-inherit hover:text-[#38BDF8] no-underline flex items-center gap-2"
-                  >
-                    {tx.attention_required && <span className="w-2 h-2 bg-[#F59E0B]" title="Requires recovery attention" />}
-                    <span>{tx.transfer_id.slice(0, 12)}...</span>
-                  </Link>
-                </td>
-                <td className="py-3 px-4 font-bold text-white">
-                  {formatINR(tx.amount_minor)}
-                </td>
-                <td className="py-3 px-4 text-[#94A3B8] text-[11px]">
-                  {tx.source_ledger_id} &rarr; {tx.destination_ledger_id}
-                </td>
-                <td className="py-3 px-4">
-                  <span
-                    className={`px-2 py-0.5 text-[10px] ${
-                      tx.decision === 'COMMIT'
-                        ? 'bg-[#064E3B] text-[#10B981]'
-                        : tx.decision === 'CANCEL'
-                        ? 'bg-[#7F1D1D] text-[#EF4444]'
-                        : 'bg-[#1E293B] text-[#94A3B8]'
-                    }`}
-                  >
-                    {tx.decision || 'PENDING'}
-                  </span>
-                </td>
-                <td className="py-3 px-4">
-                  <span
-                    className={`px-2 py-0.5 text-[10px] ${
-                      tx.state === 'SETTLED'
-                        ? 'bg-[#064E3B]/60 text-[#10B981]'
-                        : tx.state === 'CANCELLED'
-                        ? 'bg-[#7F1D1D]/60 text-[#EF4444]'
-                        : 'bg-[#78350F]/60 text-[#F59E0B]'
-                    }`}
-                  >
-                    {tx.state}
-                  </span>
-                </td>
-                <td className="py-3 px-4 text-[11px] text-[#64748B]">
-                  {new Date(tx.created_at).toLocaleTimeString()}
-                </td>
-                <td className="py-3 px-4 text-right">
-                  <Link
-                    href={`/console/transfers/${tx.transfer_id}`}
-                    className="text-[#38BDF8] hover:underline"
-                  >
-                    Inspect Timeline &rarr;
-                  </Link>
-                </td>
+      {/* Dense Transfers Table Container */}
+      <div
+        style={{
+          borderRadius: 'var(--radius-primary, 28px)',
+          background: 'rgba(15, 23, 42, 0.7)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', textAlign: 'left', fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ color: '#94A3B8', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(11, 15, 23, 0.5)', fontSize: '0.6875rem' }}>
+                <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Transfer ID</th>
+                <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Amount</th>
+                <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Route</th>
+                <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Durable Decision</th>
+                <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Workflow State</th>
+                <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Created Timestamp</th>
+                <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600, textAlign: 'right' }}>TCC Lifecycle</th>
               </tr>
-            ))}
-            {filteredTransfers.length === 0 && !loading && (
-              <tr>
-                <td colSpan={7} className="py-12 text-center text-[#64748B]">
-                  No transfers found matching filter criteria.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody style={{ color: '#CBD5E1' }}>
+              {filteredTransfers.map((tx) => (
+                <tr
+                  key={tx.transfer_id}
+                  style={{
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.03)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  <td style={{ padding: '0.875rem 1.25rem', fontWeight: 600, color: '#F8FAFC' }}>
+                    <Link
+                      href={`/console/transfers/${tx.transfer_id}`}
+                      style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', minHeight: '24px', lineHeight: '24px' }}
+                    >
+                      {tx.attention_required && (
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#F59E0B', boxShadow: '0 0 6px rgba(245, 158, 11, 0.6)' }} title="Requires recovery attention" />
+                      )}
+                      <span>{tx.transfer_id.slice(0, 12)}...</span>
+                    </Link>
+                  </td>
+                  <td style={{ padding: '0.875rem 1.25rem', fontWeight: 700, color: '#FFFFFF' }}>
+                    {formatINR(tx.amount_minor)}
+                  </td>
+                  <td style={{ padding: '0.875rem 1.25rem', color: '#94A3B8', fontSize: '0.75rem' }}>
+                    {tx.source_ledger_id} → {tx.destination_ledger_id}
+                  </td>
+                  <td style={{ padding: '0.875rem 1.25rem' }}>
+                    <span
+                      style={{
+                        padding: '0.2rem 0.55rem',
+                        fontSize: '0.625rem',
+                        borderRadius: 'var(--radius-pill, 9999px)',
+                        fontWeight: 700,
+                        backgroundColor:
+                          tx.decision === 'COMMIT'
+                            ? 'rgba(5, 150, 105, 0.15)'
+                            : tx.decision === 'CANCEL'
+                            ? 'rgba(220, 38, 38, 0.15)'
+                            : 'rgba(255, 255, 255, 0.08)',
+                        color:
+                          tx.decision === 'COMMIT'
+                            ? '#34D399'
+                            : tx.decision === 'CANCEL'
+                            ? '#EF4444'
+                            : '#94A3B8',
+                      }}
+                    >
+                      {tx.decision || 'PENDING'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.875rem 1.25rem' }}>
+                    <span
+                      style={{
+                        padding: '0.2rem 0.55rem',
+                        fontSize: '0.625rem',
+                        borderRadius: 'var(--radius-pill, 9999px)',
+                        fontWeight: 700,
+                        backgroundColor:
+                          tx.state === 'SETTLED'
+                            ? 'rgba(5, 150, 105, 0.15)'
+                            : tx.state === 'CANCELLED'
+                            ? 'rgba(220, 38, 38, 0.15)'
+                            : 'rgba(245, 158, 11, 0.15)',
+                        color:
+                          tx.state === 'SETTLED'
+                            ? '#34D399'
+                            : tx.state === 'CANCELLED'
+                            ? '#EF4444'
+                            : '#F59E0B',
+                      }}
+                    >
+                      {tx.state}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.875rem 1.25rem', fontSize: '0.75rem', color: '#94A3B8' }}>
+                    {new Date(tx.created_at).toLocaleTimeString()}
+                  </td>
+                  <td style={{ padding: '0.875rem 1.25rem', textAlign: 'right' }}>
+                    <Link
+                      href={`/console/transfers/${tx.transfer_id}`}
+                      style={{
+                        color: '#38BDF8',
+                        textDecoration: 'none',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        display: 'inline-block',
+                        minHeight: '24px',
+                        lineHeight: '24px',
+                      }}
+                    >
+                      Inspect Timeline →
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {filteredTransfers.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>
+                    No transfers found matching filter criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

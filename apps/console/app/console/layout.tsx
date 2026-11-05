@@ -57,8 +57,18 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center p-6 text-sm text-[#737373]">
-        <span className="font-mono text-xs uppercase tracking-widest text-[#171717]">
+      <div
+        className="dark-operational-field"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#94A3B8',
+          fontSize: '0.875rem',
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#F1F5F9' }}>
           Verifying Operator Credentials...
         </span>
       </div>
@@ -75,159 +85,307 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     overview?.reachability?.['ledger-2'];
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#F9F8F6] text-[#171717] selection:bg-[#1D4ED8] selection:text-white">
-      {/* Mobile Header Bar */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#F9F8F6] border-b border-[#E5E2DA]">
-        <Link href="/console" className="flex items-center gap-2 text-inherit no-underline">
-          <span className="w-2.5 h-2.5 bg-[#171717]" />
-          <span className="font-mono text-xs uppercase tracking-widest font-semibold text-[#171717]">
+    <div
+      className="dark-operational-field"
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        color: 'var(--text-operational)',
+        fontFamily: 'var(--font-sans)',
+      }}
+    >
+      {/* Mobile Top Header */}
+      <div
+        className="md:hidden"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.875rem 1.25rem',
+          background: 'rgba(11, 15, 25, 0.90)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+        }}
+      >
+        <Link href="/console" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: '#F8FAFC' }}>
+          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#38BDF8', boxShadow: '0 0 10px #38BDF8' }} />
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700 }}>
             LedgerGuard
           </span>
         </Link>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1.5 text-xs font-mono uppercase bg-white border border-[#E5E2DA]"
+          style={{
+            padding: '0.4rem 0.8rem',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-mono)',
+            textTransform: 'uppercase',
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: 'var(--radius-control, 14px)',
+            color: '#F1F5F9',
+            cursor: 'pointer',
+          }}
         >
           {mobileMenuOpen ? 'Close' : 'Menu'}
         </button>
       </div>
 
-      {/* Desktop Pale Stone Sidebar Navigation Rail */}
-      <aside
-        className={`${
-          mobileMenuOpen ? 'block' : 'hidden'
-        } md:flex flex-col w-full md:w-64 bg-[#F9F8F6] border-r border-[#E5E2DA] flex-shrink-0 z-20`}
-      >
-        {/* Brand & Platform Header */}
-        <div className="p-6 border-b border-[#E5E2DA]">
-          <Link href="/" className="flex items-center gap-2 group text-inherit no-underline">
-            <span className="w-2.5 h-2.5 bg-[#171717] group-hover:bg-[#1D4ED8] transition-colors" />
-            <span className="font-mono text-xs uppercase tracking-widest font-semibold text-[#171717]">
-              LedgerGuard
-            </span>
-          </Link>
-          <div className="mt-2 text-[11px] font-mono uppercase tracking-wider text-[#737373]">
-            Operator Control Plane
+      <div style={{ display: 'flex', flex: 1, minWidth: 0, padding: '1rem', gap: '1rem' }}>
+        {/* Desktop Rounded Floating Navigation Rail */}
+        <aside
+          className={`${mobileMenuOpen ? 'block' : 'hidden'} md:flex flex-col`}
+          style={{
+            width: '270px',
+            background: 'rgba(14, 20, 34, 0.82)',
+            backdropFilter: 'blur(28px)',
+            WebkitBackdropFilter: 'blur(28px)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: 'var(--radius-primary, 28px)',
+            boxShadow: '0 20px 48px -12px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+            flexShrink: 0,
+            zIndex: 30,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Brand & Platform Header */}
+          <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
+            <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', textDecoration: 'none', color: '#F8FAFC' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#38BDF8', boxShadow: '0 0 10px #38BDF8' }} />
+              <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                LedgerGuard
+              </span>
+            </Link>
+            <div style={{ marginTop: '0.35rem', fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B' }}>
+              Operator Control Plane
+            </div>
           </div>
-        </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.href === '/console'
-                ? pathname === '/console'
-                : pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 text-xs font-medium rounded-none transition-colors no-underline ${
-                  isActive
-                    ? 'bg-[#1D4ED8] text-white font-semibold'
-                    : 'text-[#404040] hover:bg-[#EAE7DF] hover:text-[#171717]'
-                }`}
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={isActive ? 'text-white' : 'text-[#737373]'}
+          {/* Navigation Items */}
+          <nav style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem', overflowY: 'auto' }}>
+            {NAV_ITEMS.map((item) => {
+              const isActive =
+                item.href === '/console'
+                  ? pathname === '/console'
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.65rem 0.95rem',
+                    fontSize: '0.8125rem',
+                    fontWeight: isActive ? 600 : 500,
+                    borderRadius: 'var(--radius-control, 14px)',
+                    textDecoration: 'none',
+                    color: isActive ? '#FFFFFF' : '#94A3B8',
+                    background: isActive
+                      ? 'linear-gradient(135deg, rgba(29, 78, 216, 0.40) 0%, rgba(37, 99, 235, 0.20) 100%)'
+                      : 'transparent',
+                    border: isActive
+                      ? '1px solid rgba(59, 130, 246, 0.45)'
+                      : '1px solid transparent',
+                    boxShadow: isActive ? '0 4px 14px rgba(29, 78, 216, 0.25)' : 'none',
+                    transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                  }}
                 >
-                  <path d={item.icon} />
-                </svg>
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ color: isActive ? '#60A5FA' : '#64748B' }}
+                  >
+                    <path d={item.icon} />
+                  </svg>
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
 
-        {/* Cluster Connectivity Telemetry Widget */}
-        <div className="p-4 mx-3 mb-3 bg-white border border-[#E5E2DA] flex flex-col gap-2">
-          <div className="flex items-center justify-between text-[11px] font-mono uppercase">
-            <span className="text-[#737373]">3 Databases</span>
-            <span className={allReachable ? 'text-[#16A34A] font-bold' : 'text-[#DC2626] font-bold'}>
-              {allReachable ? 'Synchronized' : 'Degraded'}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-1 pt-1 border-t border-[#F5F4F0] text-[10px] font-mono text-center">
-            <div className={`p-1 ${overview?.reachability?.coordinator ? 'bg-[#F0FDF4] text-[#16A34A]' : 'bg-[#FEF2F2] text-[#DC2626]'}`}>
-              Coord :42
-            </div>
-            <div className={`p-1 ${overview?.reachability?.['ledger-1'] ? 'bg-[#F0FDF4] text-[#16A34A]' : 'bg-[#FEF2F2] text-[#DC2626]'}`}>
-              L1 :43
-            </div>
-            <div className={`p-1 ${overview?.reachability?.['ledger-2'] ? 'bg-[#F0FDF4] text-[#16A34A]' : 'bg-[#FEF2F2] text-[#DC2626]'}`}>
-              L2 :44
-            </div>
-          </div>
-        </div>
-
-        {/* Operator Identity & Sign Out */}
-        <div className="p-4 border-t border-[#E5E2DA] bg-[#FAF9F5] flex items-center justify-between">
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs font-semibold text-[#171717] truncate">
-              {operator?.username || 'Operator'}
-            </span>
-            <span className="text-[10px] font-mono uppercase text-[#737373]">
-              {operator?.role || 'OPERATOR'} · {operator?.totp_enabled ? 'MFA' : 'Standard'}
-            </span>
-          </div>
-          <button
-            onClick={() => logout()}
-            className="text-xs text-[#737373] hover:text-[#DC2626] font-mono uppercase bg-transparent border-0 cursor-pointer p-1"
-            title="Revoke session and sign out"
+          {/* Cluster Connectivity Telemetry Widget */}
+          <div
+            style={{
+              margin: '0.75rem',
+              padding: '1rem',
+              background: 'rgba(20, 28, 48, 0.65)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 'var(--radius-secondary, 20px)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}
           >
-            Sign Out
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Right Viewport: Dark Continuous Operational Workspace */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#0B0F17] text-[#F3F4F6]">
-        {/* Top Operational Bar */}
-        <header className="h-14 px-6 border-b border-[#1E293B] bg-[#0B0F17]/95 sticky top-0 z-10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-[#38BDF8] uppercase tracking-wider font-semibold">
-              Live Topology
-            </span>
-            <span className="text-[#475569] text-xs">/</span>
-            <span className="text-xs text-[#94A3B8]">
-              {pathname === '/console' && 'Cluster Overview & Conservation Telemetry'}
-              {pathname.startsWith('/console/accounts') && 'Partitioned Customer Ledgers & Immutable Statements'}
-              {pathname.startsWith('/console/transfers') && 'Try-Confirm-Cancel Distributed Workflow Engine'}
-              {pathname.startsWith('/console/reconciliation') && 'Cross-Ledger Clearing Invariant Audit'}
-              {pathname.startsWith('/console/experiments') && 'Deterministic Fault Injection & Recovery Lab'}
-              {pathname.startsWith('/console/security') && 'Operator Credentials & Session Management'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
+              <span style={{ color: '#94A3B8' }}>3 Databases</span>
+              <span style={{ color: allReachable ? '#34D399' : '#EF4444', fontWeight: 700 }}>
+                {allReachable ? 'Synchronized' : 'Degraded'}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.35rem', paddingTop: '0.35rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)', fontSize: '0.625rem', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
+              <div style={{ padding: '0.35rem 0.2rem', borderRadius: 'var(--radius-xs)', background: overview?.reachability?.coordinator ? 'rgba(5, 150, 105, 0.15)' : 'rgba(220, 38, 38, 0.15)', color: overview?.reachability?.coordinator ? '#34D399' : '#FCA5A5' }}>
+                Coord :42
+              </div>
+              <div style={{ padding: '0.35rem 0.2rem', borderRadius: 'var(--radius-xs)', background: overview?.reachability?.['ledger-1'] ? 'rgba(5, 150, 105, 0.15)' : 'rgba(220, 38, 38, 0.15)', color: overview?.reachability?.['ledger-1'] ? '#34D399' : '#FCA5A5' }}>
+                L1 :43
+              </div>
+              <div style={{ padding: '0.35rem 0.2rem', borderRadius: 'var(--radius-xs)', background: overview?.reachability?.['ledger-2'] ? 'rgba(5, 150, 105, 0.15)' : 'rgba(220, 38, 38, 0.15)', color: overview?.reachability?.['ledger-2'] ? '#34D399' : '#FCA5A5' }}>
+                L2 :44
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] font-mono text-[#64748B]">
-              {lastRefreshedAt
-                ? `Sync ${lastRefreshedAt.toLocaleTimeString()}`
-                : 'Connecting...'}
-            </span>
+          {/* Operator Identity & Sign Out */}
+          <div
+            style={{
+              padding: '1rem 1.25rem',
+              borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+              background: 'rgba(11, 15, 25, 0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#F8FAFC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {operator?.username || 'Operator'}
+              </span>
+              <span style={{ fontSize: '0.625rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: '#64748B' }}>
+                {operator?.role || 'OPERATOR'} · {operator?.totp_enabled ? 'MFA' : 'Standard'}
+              </span>
+            </div>
             <button
-              onClick={refreshTelemetry}
-              disabled={isRefreshing}
-              className="px-2.5 py-1 text-xs font-mono text-[#94A3B8] hover:text-white bg-[#1E293B] hover:bg-[#334155] border-0 transition-colors disabled:opacity-50 cursor-pointer"
+              onClick={() => logout()}
+              style={{
+                fontSize: '0.75rem',
+                color: '#94A3B8',
+                fontFamily: 'var(--font-mono)',
+                textTransform: 'uppercase',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: 'var(--radius-sm, 10px)',
+                cursor: 'pointer',
+                padding: '0.35rem 0.65rem',
+                transition: 'all 0.18s ease',
+              }}
+              title="Revoke session and sign out"
             >
-              {isRefreshing ? 'Syncing...' : '↻ Refresh'}
+              Sign Out
             </button>
           </div>
-        </header>
+        </aside>
 
-        {/* Content Body */}
-        <main className="flex-1 p-6 md:p-8 max-w-[1600px] w-full mx-auto overflow-y-auto">
-          {children}
-        </main>
+        {/* Main Operational Workspace Canvas */}
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            background: 'rgba(11, 15, 25, 0.70)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: 'var(--radius-primary, 28px)',
+            boxShadow: '0 24px 64px -16px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Frosted Top Operational Bar */}
+          <header
+            style={{
+              height: '3.75rem',
+              padding: '0 1.75rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+              background: 'rgba(14, 20, 34, 0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.75rem',
+                  color: '#38BDF8',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  fontWeight: 700,
+                  background: 'rgba(6, 182, 212, 0.12)',
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: 'var(--radius-pill, 9999px)',
+                  border: '1px solid rgba(6, 182, 212, 0.25)',
+                }}
+              >
+                Live Topology
+              </span>
+              <span style={{ color: '#475569', fontSize: '0.75rem' }}>/</span>
+              <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>
+                {pathname === '/console' && 'Cluster Overview & Clearing Conservation Telemetry'}
+                {pathname.startsWith('/console/accounts') && 'Partitioned Customer Ledgers & Immutable Statements'}
+                {pathname.startsWith('/console/transfers') && 'Try-Confirm-Cancel Distributed Workflow Engine'}
+                {pathname.startsWith('/console/reconciliation') && 'Cross-Ledger Clearing Invariant Audit'}
+                {pathname.startsWith('/console/experiments') && 'Deterministic Fault Injection & Recovery Lab'}
+                {pathname.startsWith('/console/security') && 'Operator Credentials & Session Management'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <span style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', color: '#64748B' }}>
+                {lastRefreshedAt
+                  ? `Sync ${lastRefreshedAt.toLocaleTimeString()}`
+                  : 'Connecting...'}
+              </span>
+              <button
+                onClick={refreshTelemetry}
+                disabled={isRefreshing}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.75rem',
+                  fontFamily: 'var(--font-mono)',
+                  color: '#E2E8F0',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: 'var(--radius-control, 14px)',
+                  cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                  opacity: isRefreshing ? 0.6 : 1,
+                  transition: 'all 0.18s ease',
+                }}
+              >
+                {isRefreshing ? 'Syncing...' : '↻ Refresh'}
+              </button>
+            </div>
+          </header>
+
+          {/* Content Body */}
+          <main
+            style={{
+              flex: 1,
+              padding: '2rem',
+              overflowY: 'auto',
+              width: '100%',
+              maxWidth: '1600px',
+              margin: '0 auto',
+            }}
+          >
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

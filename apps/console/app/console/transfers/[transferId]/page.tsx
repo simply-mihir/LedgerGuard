@@ -84,6 +84,11 @@ export default function TransferDetailPage() {
   const [timeline, setTimeline] = useState<WorkflowEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedPayloads, setExpandedPayloads] = useState<Record<string, boolean>>({});
+
+  const togglePayload = (id: string) => {
+    setExpandedPayloads((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   useEffect(() => {
     if (!transferId) return;
@@ -113,18 +118,30 @@ export default function TransferDetailPage() {
     <div className="flex flex-col gap-6">
       {/* Breadcrumb & Navigation */}
       <div className="flex items-center gap-2 text-xs font-mono text-[#94A3B8]">
-        <Link href="/console/transfers" className="hover:text-white no-underline text-inherit">
-          &larr; Transfers Explorer
+        <Link href="/console/transfers" className="hover:text-white no-underline text-inherit flex items-center gap-1.5 transition-colors">
+          <span>←</span>
+          <span>Transfers Explorer</span>
         </Link>
         <span>/</span>
         <span className="text-[#38BDF8]">{transferId}</span>
       </div>
 
       {/* Transfer Header Card */}
-      <div className="p-6 bg-[#0F172A] border border-[#1E293B] flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div
+        style={{
+          borderRadius: 'var(--radius-primary, 28px)',
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)',
+          padding: '1.75rem',
+        }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-6"
+      >
         <div>
           <div className="inline-flex items-center gap-2 font-mono text-[11px] text-[#38BDF8] uppercase tracking-wider mb-2">
-            <span className="w-1.5 h-1.5 bg-[#38BDF8]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#38BDF8] shadow-[0_0_8px_rgba(56,189,248,0.6)]" />
             TCC Distributed Lifecycle
           </div>
           <h1 className="text-2xl md:text-3xl font-mono text-white font-bold tracking-tight">
@@ -132,47 +149,80 @@ export default function TransferDetailPage() {
           </h1>
           <div className="flex flex-wrap items-center gap-3 mt-3 text-xs font-mono text-[#94A3B8]">
             <span>Amount: <strong className="text-white font-bold">{formatINR(transfer?.amount_minor ?? 0)}</strong></span>
-            <span>&bull;</span>
-            <span className="text-[#38BDF8]">{transfer?.source_ledger_id} &rarr; {transfer?.destination_ledger_id}</span>
-            <span>&bull;</span>
+            <span>•</span>
+            <span className="text-[#38BDF8]">{transfer?.source_ledger_id} → {transfer?.destination_ledger_id}</span>
+            <span>•</span>
             <span>Source Acct: <Link href={`/console/accounts/${transfer?.source_account_id}`} className="text-inherit hover:underline">{transfer?.source_account_id.slice(0, 8)}...</Link></span>
-            <span>&bull;</span>
+            <span>•</span>
             <span>Dest Acct: <Link href={`/console/accounts/${transfer?.destination_account_id}`} className="text-inherit hover:underline">{transfer?.destination_account_id.slice(0, 8)}...</Link></span>
           </div>
         </div>
 
         {/* State Badges */}
-        <div className="flex flex-col items-end gap-2 font-mono">
+        <div className="flex flex-col items-start md:items-end gap-2 font-mono">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#64748B] uppercase">Decision:</span>
+            <span className="text-[11px] text-[#94A3B8] uppercase">Decision:</span>
             <span
-              className={`px-2.5 py-1 text-xs font-bold ${
-                transfer?.decision === 'COMMIT'
-                  ? 'bg-[#064E3B] text-[#10B981]'
-                  : transfer?.decision === 'CANCEL'
-                  ? 'bg-[#7F1D1D] text-[#EF4444]'
-                  : 'bg-[#1E293B] text-[#94A3B8]'
-              }`}
+              style={{
+                padding: '0.25rem 0.65rem',
+                fontSize: '0.6875rem',
+                borderRadius: 'var(--radius-pill, 9999px)',
+                fontWeight: 700,
+                backgroundColor:
+                  transfer?.decision === 'COMMIT'
+                    ? 'rgba(5, 150, 105, 0.2)'
+                    : transfer?.decision === 'CANCEL'
+                    ? 'rgba(220, 38, 38, 0.2)'
+                    : 'rgba(255, 255, 255, 0.08)',
+                color:
+                  transfer?.decision === 'COMMIT'
+                    ? '#34D399'
+                    : transfer?.decision === 'CANCEL'
+                    ? '#EF4444'
+                    : '#94A3B8',
+                border: transfer?.decision === 'COMMIT' ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(255, 255, 255, 0.06)',
+              }}
             >
               {transfer?.decision || 'PENDING'}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#64748B] uppercase">State:</span>
+            <span className="text-[11px] text-[#94A3B8] uppercase">State:</span>
             <span
-              className={`px-2.5 py-1 text-xs font-bold ${
-                transfer?.state === 'SETTLED'
-                  ? 'bg-[#064E3B]/60 text-[#10B981]'
-                  : transfer?.state === 'CANCELLED'
-                  ? 'bg-[#7F1D1D]/60 text-[#EF4444]'
-                  : 'bg-[#78350F]/60 text-[#F59E0B]'
-              }`}
+              style={{
+                padding: '0.25rem 0.65rem',
+                fontSize: '0.6875rem',
+                borderRadius: 'var(--radius-pill, 9999px)',
+                fontWeight: 700,
+                backgroundColor:
+                  transfer?.state === 'SETTLED'
+                    ? 'rgba(5, 150, 105, 0.2)'
+                    : transfer?.state === 'CANCELLED'
+                    ? 'rgba(220, 38, 38, 0.2)'
+                    : 'rgba(245, 158, 11, 0.2)',
+                color:
+                  transfer?.state === 'SETTLED'
+                    ? '#34D399'
+                    : transfer?.state === 'CANCELLED'
+                    ? '#EF4444'
+                    : '#F59E0B',
+                border: transfer?.state === 'SETTLED' ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+              }}
             >
               {transfer?.state || 'IN_FLIGHT'}
             </span>
           </div>
           {transfer?.attention_required && (
-            <span className="text-[11px] text-[#F59E0B] font-bold">
+            <span
+              style={{
+                fontSize: '0.6875rem',
+                color: '#F59E0B',
+                fontWeight: 700,
+                padding: '0.2rem 0.5rem',
+                borderRadius: 'var(--radius-pill, 9999px)',
+                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+              }}
+            >
               ⚠ Attention: {transfer.attention_reason}
             </span>
           )}
@@ -180,23 +230,70 @@ export default function TransferDetailPage() {
       </div>
 
       {error && (
-        <div className="p-4 bg-[#7F1D1D]/30 border-l-2 border-[#DC2626] text-xs text-[#FCA5A5]">
+        <div
+          style={{
+            padding: '1rem 1.25rem',
+            borderRadius: 'var(--radius-control, 14px)',
+            background: 'rgba(127, 29, 29, 0.3)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            color: '#FCA5A5',
+            fontSize: '0.75rem',
+          }}
+        >
           {error}
         </div>
       )}
 
-      {/* Vertical Narrative TCC Event Timeline */}
-      <div className="p-6 bg-[#0F172A] border border-[#1E293B]">
-        <div className="pb-4 mb-6 border-b border-[#1E293B]">
-          <h2 className="text-base font-serif text-white tracking-tight">
-            Authoritative Event Timeline
-          </h2>
-          <p className="text-xs text-[#94A3B8]">
-            Sequential workflow events recorded in coordinator &lsquo;workflow_events&rsquo; table. Highlights the durable COMMIT decision boundary.
-          </p>
+      {/* Vertical Narrative TCC Event Timeline Container */}
+      <div
+        style={{
+          borderRadius: 'var(--radius-primary, 28px)',
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)',
+          padding: '1.75rem',
+        }}
+      >
+        <div className="pb-4 mb-6 border-b border-white/[0.08] flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-serif text-white tracking-tight">
+              Authoritative Event Timeline
+            </h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">
+              Sequential workflow events recorded in coordinator &lsquo;workflow_events&rsquo; table. Highlights the durable COMMIT decision boundary.
+            </p>
+          </div>
+          <span
+            style={{
+              padding: '0.25rem 0.65rem',
+              borderRadius: 'var(--radius-pill, 9999px)',
+              background: 'rgba(11, 15, 23, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.6875rem',
+              color: '#38BDF8',
+            }}
+          >
+            {timeline.length} Authoritative Milestones
+          </span>
         </div>
 
-        <div className="relative pl-6 border-l-2 border-[#1E293B] space-y-8">
+        <div className="relative pl-8 space-y-6">
+          {/* Continuous vertical timeline connector path */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '12px',
+              bottom: '12px',
+              left: '11px',
+              width: '2px',
+              background: 'linear-gradient(to bottom, #38BDF8, #10B981 60%, rgba(255, 255, 255, 0.1))',
+              borderRadius: '1px',
+            }}
+          />
+
           {timeline.map((evt, idx) => {
             const meta = EVENT_DESCRIPTIONS[evt.event_type] || {
               label: evt.event_type,
@@ -205,56 +302,149 @@ export default function TransferDetailPage() {
               desc: 'Authoritative workflow lifecycle event.',
             };
             const isDecisionBoundary = evt.event_type === 'DECISION_COMMITTED';
+            const eventKey = evt.event_id || `evt-${idx}`;
+            const isPayloadOpen = expandedPayloads[eventKey] ?? false;
 
             return (
-              <div key={evt.event_id || idx} className="relative group">
-                {/* Milestone Node */}
+              <div key={eventKey} className="relative group">
+                {/* Circular Milestone Node with Glowing Rings */}
                 <div
-                  className="absolute -left-[31px] top-1 w-3.5 h-3.5 rounded-none border-2 border-[#0F172A]"
-                  style={{ backgroundColor: meta.color }}
-                />
+                  style={{
+                    position: 'absolute',
+                    left: '-28px',
+                    top: '14px',
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: 'var(--radius-pill, 9999px)',
+                    backgroundColor: '#0F172A',
+                    border: `2px solid ${meta.color}`,
+                    boxShadow: `0 0 10px ${meta.color}66`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: 'var(--radius-pill, 9999px)',
+                      backgroundColor: meta.color,
+                    }}
+                  />
+                </div>
 
                 <div
-                  className={`p-4 bg-[#0B0F17] border ${isDecisionBoundary ? 'border-[#10B981] shadow-[0_0_20px_rgba(16,185,129,0.15)]' : 'border-[#1E293B]'}`}
-                  style={{ backgroundColor: '#0B0F17' }}
+                  style={{
+                    padding: '1.25rem',
+                    borderRadius: 'var(--radius-secondary, 20px)',
+                    background: isDecisionBoundary
+                      ? 'linear-gradient(135deg, rgba(6, 78, 59, 0.35) 0%, rgba(11, 15, 23, 0.85) 100%)'
+                      : 'rgba(11, 15, 23, 0.75)',
+                    border: isDecisionBoundary
+                      ? '1px solid rgba(16, 185, 129, 0.5)'
+                      : '1px solid rgba(255, 255, 255, 0.08)',
+                    boxShadow: isDecisionBoundary
+                      ? '0 0 30px rgba(16, 185, 129, 0.15), 0 10px 25px -5px rgba(0, 0, 0, 0.5)'
+                      : '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    transition: 'all 0.2s ease',
+                  }}
                 >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-2 border-b border-[#1E293B]/60">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-2 border-b border-white/[0.08]">
                     <div>
-                      <span className="text-[10px] font-mono uppercase tracking-wider block" style={{ color: meta.color }}>
+                      <span className="text-[10px] font-mono uppercase tracking-wider block font-semibold" style={{ color: meta.color }}>
                         {meta.stage}
                       </span>
-                      <h3 className="text-sm font-mono font-bold mt-0.5" style={{ color: '#FFFFFF' }}>
-                        {evt.event_type}
+                      <h3 className="text-sm font-mono font-bold mt-0.5 text-white flex items-center gap-2">
+                        <span>{evt.event_type}</span>
+                        {isDecisionBoundary && (
+                          <span
+                            style={{
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: 'var(--radius-pill, 9999px)',
+                              backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                              color: '#34D399',
+                              fontSize: '0.625rem',
+                              fontWeight: 700,
+                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                            }}
+                          >
+                            POINT OF NO RETURN
+                          </span>
+                        )}
                       </h3>
                     </div>
-                    <span className="text-[11px] font-mono" style={{ color: '#94A3B8' }}>
+                    <span className="text-[11px] font-mono text-[#94A3B8]">
                       {new Date(evt.created_at).toLocaleTimeString()} ({new Date(evt.created_at).toISOString()})
                     </span>
                   </div>
 
-                  <p className="text-xs mt-2 leading-relaxed" style={{ color: '#E2E8F0' }}>
+                  <p className="text-xs mt-2.5 leading-relaxed text-[#CBD5E1]">
                     {meta.desc}
                   </p>
 
-                  {/* Optional Details Payload */}
-                  {evt.details && Object.keys(evt.details).length > 0 && (
+                  {/* Point of No Return callout */}
+                  {isDecisionBoundary && (
                     <div
-                      className="mt-3 p-2.5 border border-[#1E293B] text-[11px] font-mono"
-                      style={{ backgroundColor: '#0F172A', color: '#94A3B8' }}
+                      style={{
+                        marginTop: '0.75rem',
+                        padding: '0.75rem 1rem',
+                        borderRadius: 'var(--radius-control, 14px)',
+                        background: 'rgba(6, 78, 59, 0.3)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        color: '#A7F3D0',
+                        fontSize: '0.75rem',
+                        lineHeight: 1.5,
+                      }}
                     >
-                      <div className="text-[10px] uppercase mb-1" style={{ color: '#94A3B8' }}>Event Payload Details:</div>
-                      <pre className="m-0 overflow-x-auto whitespace-pre-wrap">
-                        {JSON.stringify(evt.details, null, 2)}
-                      </pre>
+                      <strong className="text-white">Point of No Return:</strong> The coordinator has durably committed this transfer. Even if a crash or network partition occurs immediately after this boundary, the worker orchestrator will forward-recover participants without aborting.
                     </div>
                   )}
 
-                  {isDecisionBoundary && (
-                    <div
-                      className="mt-3 p-2 border-l-2 border-[#10B981] text-[11px]"
-                      style={{ backgroundColor: 'rgba(6, 78, 59, 0.4)', color: '#A7F3D0' }}
-                    >
-                      <strong>Point of No Return:</strong> The coordinator has durably committed this transfer. Even if a crash or network partition occurs immediately after this boundary, the worker orchestrator will forward-recover participants without aborting.
+                  {/* Optional Details Payload block */}
+                  {evt.details && Object.keys(evt.details).length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <button
+                        onClick={() => togglePayload(eventKey)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#38BDF8',
+                          fontSize: '0.6875rem',
+                          fontFamily: 'var(--font-mono)',
+                          cursor: 'pointer',
+                          padding: '0.2rem 0',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <span>{isPayloadOpen ? '▼ Hide Event Payload' : '▶ Inspect Event Payload'}</span>
+                        <span style={{ color: '#64748B' }}>({Object.keys(evt.details).length} fields)</span>
+                      </button>
+
+                      {isPayloadOpen && (
+                        <div
+                          style={{
+                            marginTop: '0.5rem',
+                            padding: '0.75rem',
+                            borderRadius: 'var(--radius-control, 14px)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: 'rgba(15, 23, 42, 0.85)',
+                            fontSize: '0.6875rem',
+                            fontFamily: 'var(--font-mono)',
+                            color: '#94A3B8',
+                          }}
+                        >
+                          <div className="text-[10px] uppercase mb-1 text-[#64748B] font-semibold">Event Payload Details:</div>
+                          <pre className="m-0 overflow-x-auto whitespace-pre-wrap text-[#CBD5E1]">
+                            {JSON.stringify(evt.details, null, 2)}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
