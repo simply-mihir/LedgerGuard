@@ -63,6 +63,7 @@ export function SiteHeader({ currentPath = '/' }: SiteHeaderProps) {
 
   return (
     <header
+      className="sticky top-3 z-50"
       style={{
         position: 'sticky',
         top: '0.75rem',
@@ -74,7 +75,7 @@ export function SiteHeader({ currentPath = '/' }: SiteHeaderProps) {
       }}
     >
       <div
-        className="glass-nav"
+        className={`glass-nav ${isScrolled ? 'nav-compressed' : ''}`}
         style={{
           pointerEvents: 'auto',
           display: 'flex',

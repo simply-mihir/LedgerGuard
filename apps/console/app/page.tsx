@@ -11,7 +11,7 @@ import { ConsolePreviewSection } from '../components/web/console-preview-section
 
 export default function HomePage() {
   return (
-    <div className="ambient-gradient-field" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="ambient-gradient-field" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'hidden', width: '100%' }}>
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
@@ -57,7 +57,7 @@ export default function HomePage() {
                 }}
               >
                 <span>●</span>
-                <span>Autonomous Triad Consensus-Free Architecture</span>
+                <span>Autonomous 3-Database Triad Architecture</span>
               </div>
 
               <h1

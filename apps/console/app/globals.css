@@ -158,6 +158,7 @@ html {
   -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 body {
@@ -165,6 +166,7 @@ body {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-stone);
+  overflow-x: hidden;
 }
 
 /* Atmospheric Background Fields */
