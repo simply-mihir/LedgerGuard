@@ -54,12 +54,15 @@ Every migration was applied sequentially from scratch via `uv run python -m ledg
 
 Synthetic operator provisioned using non-interactive protected standard input:
 ```bash
-printf 'CleanCloneOp2026!Secure\nCleanCloneOp2026!Secure\n' | \
+read -rsp "Temporary operator password: " LEDGERGUARD_TEMP_PASSWORD
+printf '\n'
+printf '%s\n' "$LEDGERGUARD_TEMP_PASSWORD" | \
   uv run python -m ledgerguard.cli create-operator \
     --username clean_op \
     --email clean_op@test.internal \
     --role ADMIN \
     --stdin-password
+unset LEDGERGUARD_TEMP_PASSWORD
 ```
 *Result:* Operator created with Argon2id password hash (`ID=291e7fe3-2129-46a1-b81f-9818162a22f3`).
 

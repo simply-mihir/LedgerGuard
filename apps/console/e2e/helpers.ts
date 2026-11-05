@@ -17,7 +17,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../..');
  */
 export function provisionSyntheticOperator(options: { enableTotp?: boolean } = {}): SyntheticOperator {
   const script = `
-import json, uuid, time
+import json, uuid, time, secrets
 from ledgerguard.auth.models import CreateOperatorRequest
 from ledgerguard.auth.service import create_operator_account, enroll_totp
 from ledgerguard.db.pool import get_db_connection
@@ -26,7 +26,7 @@ from ledgerguard.config import settings
 uid = uuid.uuid4().hex[:10]
 username = f"e2e_{uid}"
 email = f"{username}@test.internal"
-password = f"Sec!{uuid.uuid4().hex[:12]}A1"
+password = f"Test!{secrets.token_urlsafe(16)}Aa1#"
 
 enable_totp = ${options.enableTotp ? 'True' : 'False'}
 req = CreateOperatorRequest(

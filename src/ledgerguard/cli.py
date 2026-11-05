@@ -107,7 +107,6 @@ def cmd_seed_demo_operator(args: argparse.Namespace) -> None:
         env_var_name="LEDGERGUARD_DEMO_PASSWORD",
         prompt_label="demo operator",
         require_confirmation=False,
-        default_test_password="DemoOperator2026!Secure" if settings.env in ("local", "test") else None,
     )
 
     req = CreateOperatorRequest(

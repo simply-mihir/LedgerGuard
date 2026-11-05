@@ -389,7 +389,7 @@ uv run python -m ledgerguard.cli seed-demo-operator --username operator --email 
 uv run python -m ledgerguard.cli create-operator --username admin --email admin@ledgerguard.internal --role ADMIN --enable-totp
 
 # For automated CI/CD pipelines, supply password via protected standard input
-echo "$OPERATOR_PASSWORD" | uv run python -m ledgerguard.cli create-operator --username ci_operator --email ci@ledgerguard.internal --stdin-password
+printf '%s\n' "$OPERATOR_PASSWORD" | uv run python -m ledgerguard.cli create-operator --username ci_operator --email ci@ledgerguard.internal --stdin-password
 ```
 
 ### Execute Verification Commands
