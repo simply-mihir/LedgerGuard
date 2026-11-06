@@ -14,8 +14,11 @@ AUTH_HEADERS = {"Authorization": f"Bearer {settings.api_bearer_token}"}
 
 @pytest.mark.integration
 def test_operator_overview_endpoint():
-    """Verify /v1/operator/overview returns reachability, account/transfer counts, and clearing sum."""
-    response = client.get("/v1/operator/overview")
+    """Verify /v1/operator/overview rejects unauthenticated and returns metrics when authenticated."""
+    unauth_resp = client.get("/v1/operator/overview")
+    assert unauth_resp.status_code == 401
+
+    response = client.get("/v1/operator/overview", headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
 
@@ -31,8 +34,11 @@ def test_operator_overview_endpoint():
 
 @pytest.mark.integration
 def test_operator_accounts_endpoint():
-    """Verify /v1/operator/accounts returns provisioned accounts with live balances."""
-    response = client.get("/v1/operator/accounts")
+    """Verify /v1/operator/accounts rejects unauthenticated and returns provisioned accounts when authenticated."""
+    unauth_resp = client.get("/v1/operator/accounts")
+    assert unauth_resp.status_code == 401
+
+    response = client.get("/v1/operator/accounts", headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
@@ -47,15 +53,21 @@ def test_operator_accounts_endpoint():
 
 @pytest.mark.integration
 def test_operator_transfers_and_timeline_endpoint():
-    """Verify /v1/operator/transfers returns transfers list and timeline returns workflow events."""
-    response = client.get("/v1/operator/transfers?limit=10")
+    """Verify /v1/operator/transfers and timeline reject unauthenticated and return events when authenticated."""
+    unauth_resp = client.get("/v1/operator/transfers?limit=10")
+    assert unauth_resp.status_code == 401
+
+    response = client.get("/v1/operator/transfers?limit=10", headers=AUTH_HEADERS)
     assert response.status_code == 200
     transfers = response.json()
     assert isinstance(transfers, list)
 
     if transfers:
         t_id = transfers[0]["transfer_id"]
-        t_resp = client.get(f"/v1/operator/transfers/{t_id}/timeline")
+        unauth_timeline = client.get(f"/v1/operator/transfers/{t_id}/timeline")
+        assert unauth_timeline.status_code == 401
+
+        t_resp = client.get(f"/v1/operator/transfers/{t_id}/timeline", headers=AUTH_HEADERS)
         assert t_resp.status_code == 200
         events = t_resp.json()
         assert isinstance(events, list)

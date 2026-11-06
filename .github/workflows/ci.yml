@@ -82,8 +82,8 @@ jobs:
 
       - name: Audit Python production dependencies
         run: |
-          uv export --frozen --no-dev --no-hashes -o /tmp/ledgerguard-requirements.txt
-          uvx pip-audit -r /tmp/ledgerguard-requirements.txt
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/ledgerguard-production-requirements.txt
+          uvx pip-audit -r /tmp/ledgerguard-production-requirements.txt
 
       - name: Report container status on failure
         if: failure()
@@ -118,5 +118,127 @@ jobs:
           cd apps/console
           npm ci
           npm run lint
+          npm test
           npm run build
           npm audit --omit=dev
+
+  e2e:
+    name: Real Browser E2E & Rendered Accessibility Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/console/package-lock.json
+
+      - name: Set up local environment file
+        run: cp .env.example .env
+
+      - name: Start fresh PostgreSQL 17 containers
+        run: docker compose up -d
+
+      - name: Wait for PostgreSQL database health
+        run: |
+          echo "Waiting for isolated PostgreSQL instances to become healthy..."
+          HEALTHY=0
+          for i in {1..30}; do
+            RUNNING_COUNT=$(docker compose ps --filter "status=running" -q | wc -l)
+            UNHEALTHY_COUNT=$(docker compose ps --format '{{.Health}}' | grep -v '^healthy$' | wc -l)
+            if [ "$RUNNING_COUNT" -eq 3 ] && [ "$UNHEALTHY_COUNT" -eq 0 ]; then
+              echo "All 3 PostgreSQL instances are healthy."
+              docker compose ps
+              HEALTHY=1
+              break
+            fi
+            echo "Waiting for PostgreSQL instances ($i/30)..."
+            sleep 2
+          done
+          if [ "$HEALTHY" -ne 1 ]; then
+            echo "Timed out waiting for PostgreSQL instances to become healthy."
+            docker compose ps
+            exit 1
+          fi
+
+      - name: Install Python dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Apply database migrations from scratch
+        run: uv run python -m ledgerguard.cli migrate --target all
+
+      - name: Install Node dependencies
+        run: |
+          cd apps/console
+          npm ci
+
+      - name: Install Playwright Chromium browser and OS dependencies
+        run: |
+          cd apps/console
+          npx playwright install --with-deps chromium
+
+      - name: Build Next.js operator console
+        run: |
+          cd apps/console
+          npm run build
+
+      - name: Start FastAPI backend service
+        run: |
+          LEDGERGUARD_COOKIE_SECURE=false uv run uvicorn ledgerguard.api.app:app --host 127.0.0.1 --port 8010 &
+          echo "API_PID=$!" >> $GITHUB_ENV
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:8010/health > /dev/null; then
+              echo "FastAPI backend is ready on http://127.0.0.1:8010"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Start Next.js frontend service
+        run: |
+          cd apps/console
+          npm run start &
+          echo "FRONTEND_PID=$!" >> $GITHUB_ENV
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:3300 > /dev/null; then
+              echo "Next.js operator console is ready on http://127.0.0.1:3300"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Execute real browser E2E and rendered Axe tests (Chromium gate)
+        run: |
+          cd apps/console
+          npx playwright test --project=chromium
+
+      - name: Terminate background service processes
+        if: always()
+        run: |
+          if [ -n "$FRONTEND_PID" ]; then
+            kill "$FRONTEND_PID" 2>/dev/null || true
+          fi
+          if [ -n "$API_PID" ]; then
+            kill "$API_PID" 2>/dev/null || true
+          fi
+          pkill -f "uvicorn ledgerguard.api.app:app" 2>/dev/null || true
+          pkill -f "next start" 2>/dev/null || true
+
+      - name: Tear down containers and volumes
+        if: always()
+        run: docker compose down -v

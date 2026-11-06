@@ -141,3 +141,18 @@ erDiagram
 - **`api_idempotency`**: Public API idempotency cache storing SHA-256 canonical payload fingerprints.
 - **`transfers`**: Distributed transfer lifecycle tracker (`ACCEPTED`, `PREPARING`, `COMMITTING`, `SETTLED`, `CANCELLING`, `CANCELLED`).
 - **`transfer_decisions`**: Durable decision log recording `COMMIT` or `CANCEL` under row locks.
+
+### 2.3. Coordinator Operator Authentication Schema & Migration Strategy
+
+- **`operators`**: Operator credential records with Argon2id password hashes (`password_hash`), encrypted/staged TOTP secrets (`totp_secret`, `pending_totp_secret`), RFC 6238 time-step tracking (`last_totp_step`) to prevent code replay, and brute-force lockout counters (`failed_attempts`, `locked_until`, `mfa_failed_attempts`, `mfa_locked_until`).
+- **`operator_sessions`**: Authenticated web sessions tracking SHA-256 hashed session tokens (`session_token_hash VARCHAR(64)`), CSRF secret tokens (`csrf_token`), client IP, absolute expiration (`expires_at`), and sliding idle expiration (`idle_expires_at`). Raw session tokens are never stored at rest.
+- **`operator_login_attempts`**: Append-only security audit log recording login timestamps, identifiers, source IP addresses, attempt types (`PASSWORD`, `MFA`), and success/failure flags.
+
+#### Migration 004 Architecture Rationale
+Migration `004_harden_auth_schema_and_permissions.sql` exists to perform forward least-privilege remediation and defensive schema hardening on top of `003_operator_auth_schema.sql`:
+1. **Reporter Role Isolation:** Explicitly revokes all access on `operators`, `operator_sessions`, and `operator_login_attempts` from `ledgerguard_reporter`.
+2. **Digest-Only Token Storage:** Migrates session token storage from raw UUIDs to 64-character SHA-256 digests (`session_token_hash`), ensuring database dumps or read breaches cannot yield usable session tokens.
+3. **TOTP Replay Defense:** Introduces `last_totp_step` to prevent identical 6-digit TOTP codes from being replayed within the active 30-second RFC 6238 time window.
+4. **Append-Only Audit Trails & Least Privilege:** Revokes `DELETE` on `operators` from `ledgerguard_app` and restricts `operator_login_attempts` permissions strictly to `SELECT` and `INSERT` (prohibiting `UPDATE` and `DELETE`), guaranteeing an immutable, tamper-resistant authentication audit trail.
+
+**Forward Migration Strategy:** While migrations 003 and 004 could theoretically be consolidated prior to release, retaining both is intentionally preserved as best practice. It demonstrates safe forward database evolution, proving that production schema upgrades can remediate role boundaries, tighten column constraints, and introduce hash transformations without destructive schema rewrites or table drops.

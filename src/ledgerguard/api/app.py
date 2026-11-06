@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ledgerguard.api.auth_routes import auth_router
 from ledgerguard.api.routes import router
 from ledgerguard.db.pool import close_all_pools
 
@@ -26,11 +27,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    from ledgerguard.config import settings
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.get_trusted_origins(),
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -38,6 +41,7 @@ def create_app() -> FastAPI:
     def health_check() -> dict[str, str]:
         return {"status": "UP", "version": "1.0.0"}
 
+    app.include_router(auth_router)
     app.include_router(router)
     return app
 

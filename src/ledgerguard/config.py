@@ -68,7 +68,10 @@ class Settings(BaseSettings):
     ledger2_url: str = Field(default="http://localhost:8012", alias="LEDGER2_URL")
     console_port: int = Field(default=3300, alias="CONSOLE_PORT")
 
-    # Security
+    # Security & Origins
+    trusted_origins_raw: str | None = Field(default=None, alias="LEDGERGUARD_TRUSTED_ORIGINS")
+    cookie_secure: bool | None = Field(default=None, alias="LEDGERGUARD_COOKIE_SECURE")
+    trusted_proxies_raw: str = Field(default="127.0.0.1,::1,testclient", alias="LEDGERGUARD_TRUSTED_PROXIES")
     internal_service_secret: str = Field(
         default="ledgerguard_internal_secret_token_change_in_prod",
         alias="INTERNAL_SERVICE_SECRET",
@@ -82,6 +85,34 @@ class Settings(BaseSettings):
     worker_poll_interval_ms: int = Field(default=200, alias="WORKER_POLL_INTERVAL_MS")
     worker_batch_size: int = Field(default=20, alias="WORKER_BATCH_SIZE")
     worker_lock_timeout_seconds: int = Field(default=10, alias="WORKER_LOCK_TIMEOUT_SECONDS")
+
+    def get_trusted_origins(self) -> list[str]:
+        """Return validated list of complete trusted origins.
+
+        In production, LEDGERGUARD_TRUSTED_ORIGINS must be explicitly configured.
+        In local/test environments, defaults to local dev servers if not specified.
+        """
+        if self.trusted_origins_raw is not None and self.trusted_origins_raw.strip():
+            raw_list = [o.strip() for o in self.trusted_origins_raw.split(",") if o.strip()]
+            from ledgerguard.auth.origins import normalize_origin
+
+            return [normalize_origin(o) for o in raw_list]
+
+        if self.env in ("local", "test"):
+            return [
+                "http://localhost:3300",
+                "http://127.0.0.1:3300",
+                "http://localhost:8010",
+                "http://127.0.0.1:8010",
+            ]
+
+        raise ValueError(
+            "LEDGERGUARD_TRUSTED_ORIGINS must be configured outside local/test environment."
+        )
+
+    def get_trusted_proxies(self) -> set[str]:
+        """Return set of IP addresses permitted to set reverse-proxy headers."""
+        return {p.strip() for p in self.trusted_proxies_raw.split(",") if p.strip()}
 
 
 settings = Settings()
