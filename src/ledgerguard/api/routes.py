@@ -843,3 +843,26 @@ def list_operator_chaos_campaigns(
 ) -> list[dict[str, Any]]:
     """Return recent chaos campaign reports."""
     return list(reversed(list(_chaos_campaigns.values())))
+
+
+@router.get("/operator/audit/verify")
+def verify_operator_audit_chains(
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Verify tamper-evident SHA-256 journal hash chains across all participant ledgers."""
+    from ledgerguard.audit import verify_all_ledgers
+
+    return verify_all_ledgers()
+
+
+@router.post("/operator/audit/checkpoint")
+def create_operator_audit_checkpoint(
+    ledger_id: str = Query(default="ledger-1", pattern="^(ledger-1|ledger-2)$"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Create a Merkle checkpoint for a participant ledger and attest it in Coordinator DB."""
+    from ledgerguard.audit import create_journal_checkpoint
+
+    url = settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
+    res = create_journal_checkpoint(url, settings.coordinator_db_url, ledger_id)
+    return res.model_dump()

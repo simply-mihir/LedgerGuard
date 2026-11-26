@@ -5,8 +5,8 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 3 — TLA+ formal specification (Complete)
-- **Next Stage:** Stage 4 — Tamper-evident audit journal
+- **Current Stage:** Stage 4 — Tamper-evident audit journal (Complete)
+- **Next Stage:** Stage 5 — End-to-end OpenTelemetry tracing
 
 ## Stage Checklist
 
@@ -14,7 +14,7 @@
 - [x] **Stage 1:** Independent reference model and history checker
 - [x] **Stage 2:** Automated chaos campaign engine
 - [x] **Stage 3:** TLA+ formal specification
-- [ ] **Stage 4:** Tamper-evident audit journal
+- [x] **Stage 4:** Tamper-evident audit journal
 - [ ] **Stage 5:** End-to-end OpenTelemetry tracing
 - [ ] **Stage 6:** Explainable recovery diagnostics
 - [ ] **Stage 7:** As-of-time balance reconstruction
@@ -49,6 +49,11 @@
 - Verified 8 safety invariants and 4 temporal/liveness properties under weak fairness via pinned `tla2tools.jar v1.8.0` (`902 states generated, 189 distinct states, depth 10, 0 errors`).
 - Added intentionally broken variant (`LedgerGuardTCC_broken.tla`) confirming TLC detects `DecisionMonotonicity` violation (exit 13).
 - Added `scripts/run_tla_model_check.sh`, `tla` CI job in `.github/workflows/ci.yml`, and `docs/formal_verification.md` with abstraction boundaries and implementation traceability table.
+
+### Stage 4
+- Added forward migrations `migrations/ledger/007_tamper_evident_journal_chain.sql` (transactional SHA-256 hash chain, `journal_chain_head` concurrency lock, `journal_checkpoints`, and backfill) and `migrations/coordinator/005_journal_checkpoint_attestations.sql`.
+- Implemented `src/ledgerguard/audit/journal_chain.py` with canonical hash verification, Merkle root computation, coordinator attestation, and CLI commands (`verify-journal-chain`, `create-journal-checkpoint`, `verify-journal-checkpoint`, `verify-all-ledgers`).
+- Added `/v1/operator/audit/verify`, `/v1/operator/audit/checkpoint`, Operator Console `/console/audit` view, `scripts/demo_tamper_detection.sh`, `docs/tamper_evident_journal.md`, and `tests/test_tamper_evident_journal.py`.
 
 ## Baseline Verification Evidence
 

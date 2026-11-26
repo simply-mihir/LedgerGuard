@@ -83,6 +83,9 @@ jobs:
       - name: Run bounded deterministic chaos campaign
         run: uv run python scripts/run_chaos_campaign.py --seed 42 --ops 12 --workers 2
 
+      - name: Verify tamper-evident journal hash chains
+        run: uv run python -m ledgerguard.cli verify-all-ledgers
+
       - name: Audit Python production dependencies
         run: |
           uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/ledgerguard-production-requirements.txt

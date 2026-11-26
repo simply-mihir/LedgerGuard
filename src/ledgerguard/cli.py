@@ -180,6 +180,60 @@ def cmd_check_history(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _ledger_url_for(ledger_id: str) -> str:
+    return settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
+
+
+def cmd_verify_journal_chain(args: argparse.Namespace) -> None:
+    """Verify hash chain integrity for a participant ledger."""
+    from ledgerguard.audit import verify_journal_chain
+
+    report = verify_journal_chain(_ledger_url_for(args.ledger), args.ledger)
+    print(report.model_dump_json(indent=2))
+    if report.status != "PASS":
+        sys.exit(1)
+
+
+def cmd_create_journal_checkpoint(args: argparse.Namespace) -> None:
+    """Create a Merkle checkpoint on a ledger and attest it in Coordinator DB."""
+    from ledgerguard.audit import create_journal_checkpoint
+
+    res = create_journal_checkpoint(
+        _ledger_url_for(args.ledger),
+        settings.coordinator_db_url,
+        args.ledger,
+        first_sequence=args.first_sequence,
+    )
+    print(res.model_dump_json(indent=2))
+
+
+def cmd_verify_journal_checkpoint(args: argparse.Namespace) -> None:
+    """Verify a Merkle checkpoint against ledger entries and coordinator attestation."""
+    from ledgerguard.audit import verify_journal_checkpoint
+
+    res = verify_journal_checkpoint(
+        _ledger_url_for(args.ledger),
+        settings.coordinator_db_url,
+        args.ledger,
+        checkpoint_id=args.checkpoint_id,
+    )
+    print(res.model_dump_json(indent=2))
+    if res.status != "PASS":
+        sys.exit(1)
+
+
+def cmd_verify_all_ledgers(args: argparse.Namespace) -> None:
+    """Verify hash chains across all participant ledgers."""
+    import json
+
+    from ledgerguard.audit import verify_all_ledgers
+
+    res = verify_all_ledgers()
+    print(json.dumps(res, indent=2))
+    if res["status"] != "PASS":
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="LedgerGuard management CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -246,6 +300,23 @@ def main() -> None:
         help="Output format (default: text)",
     )
     history_parser.set_defaults(func=cmd_check_history)
+
+    vjc_parser = subparsers.add_parser("verify-journal-chain", help="Verify sequential SHA-256 journal chain")
+    vjc_parser.add_argument("--ledger", choices=["ledger-1", "ledger-2"], default="ledger-1")
+    vjc_parser.set_defaults(func=cmd_verify_journal_chain)
+
+    cjc_parser = subparsers.add_parser("create-journal-checkpoint", help="Create and attest Merkle checkpoint")
+    cjc_parser.add_argument("--ledger", choices=["ledger-1", "ledger-2"], default="ledger-1")
+    cjc_parser.add_argument("--first-sequence", type=int, default=1)
+    cjc_parser.set_defaults(func=cmd_create_journal_checkpoint)
+
+    vcp_parser = subparsers.add_parser("verify-journal-checkpoint", help="Verify Merkle checkpoint and attestation")
+    vcp_parser.add_argument("--ledger", choices=["ledger-1", "ledger-2"], default="ledger-1")
+    vcp_parser.add_argument("--checkpoint-id", default=None)
+    vcp_parser.set_defaults(func=cmd_verify_journal_checkpoint)
+
+    val_parser = subparsers.add_parser("verify-all-ledgers", help="Verify hash chains across all ledgers")
+    val_parser.set_defaults(func=cmd_verify_all_ledgers)
 
     args = parser.parse_args()
     args.func(args)

@@ -30,6 +30,7 @@ const NAV_GROUPS: {
     group: 'Verify',
     items: [
       { href: '/console/chaos', label: 'Chaos Campaigns', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+      { href: '/console/audit', label: 'Audit Integrity', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
       { href: '/console/experiments', label: 'Failure Lab', icon: 'M10 2v7.31M14 2v7.31M8.5 2h7M14 9.3a6.5 6.5 0 1 1-4 0' },
     ],
   },
