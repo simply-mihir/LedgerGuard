@@ -123,3 +123,8 @@
 
 - Added `src/ledgerguard/conformance/` (Python acceptor for the TLA+ transition relation, trace extraction from `workflow_events`, TLC-backed trace validation, mutation corpus), `scripts/check_trace_conformance.py`, `tests/test_trace_conformance.py`, `docs/trace_conformance.md`, and `docs/conformance/results.json`.
 - Added `formal/tla/LedgerGuardTCCMulti.tla` (+ correct and defective configs) modelling three concurrent transfers over shared accounts, wired into `scripts/run_tla_model_check.sh` and covered by `tests/test_tla_multi_transfer.py`.
+
+## Post-V2 Evaluation: Real Fault Injection
+
+- Added `src/ledgerguard/faults/` (TCP fault proxy, out-of-process worker, invariant harness, scenarios), `scripts/run_real_fault_campaign.py`, `tests/test_real_fault_injection.py`, `docs/real_fault_injection.md`, and evidence in `docs/fault_injection/`.
+- Faults: SIGKILL of worker and API processes, network latency/partition/RST, and SIGKILL of PostgreSQL containers; nine ledger invariants plus TLA+ trace conformance are checked after recovery.
