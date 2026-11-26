@@ -2,8 +2,11 @@
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEMO_API_TOKENS = frozenset({"ledgerguard_operator_demo_token"})
+_DEMO_INTERNAL_SECRETS = frozenset({"ledgerguard_internal_secret_token_change_in_prod"})
 
 
 class Settings(BaseSettings):
@@ -98,6 +101,18 @@ class Settings(BaseSettings):
     otel_endpoint: str = Field(
         default="http://localhost:4318/v1/traces", alias="OTEL_EXPORTER_OTLP_ENDPOINT"
     )
+
+    @model_validator(mode="after")
+    def _reject_demo_secrets_in_production(self) -> "Settings":
+        """Fail closed: the documented demo secrets must never authenticate a production API."""
+        if self.env == "production":
+            if self.api_bearer_token in _DEMO_API_TOKENS or len(self.api_bearer_token) < 32:
+                raise ValueError(
+                    "API_BEARER_TOKEN must be set to a unique secret of >=32 characters in production."
+                )
+            if self.internal_service_secret in _DEMO_INTERNAL_SECRETS:
+                raise ValueError("INTERNAL_SERVICE_SECRET must be overridden in production.")
+        return self
 
     def get_trusted_origins(self) -> list[str]:
         """Return validated list of complete trusted origins.

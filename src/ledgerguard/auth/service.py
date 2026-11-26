@@ -369,6 +369,22 @@ def verify_mfa_login(
             )
 
 
+def session_auth_age_seconds(raw_token: str) -> int:
+    """Seconds since the session was established (server-side; never client-supplied)."""
+    if not raw_token:
+        return 10**9
+    with get_db_connection(_get_coord_db_url()) as conn:
+        cur: Any
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT EXTRACT(EPOCH FROM (NOW() - created_at)) AS age FROM operator_sessions "
+                "WHERE session_token_hash = %s",
+                (_hash_token(raw_token),),
+            )
+            row = cur.fetchone()
+    return int(row["age"]) if row and row["age"] is not None else 10**9
+
+
 def validate_session(raw_token: str) -> tuple[OperatorPublicInfo | None, str | None]:
     """Validate active session cookie against stored SHA-256 hash.
 

@@ -6,6 +6,8 @@ from fastapi import Header, HTTPException, Request, status
 
 from ledgerguard.auth.dependencies import (
     COOKIE_SESSION_NAME,
+    SYSTEM_OPERATOR,
+    WRITE_ROLES,
 )
 from ledgerguard.auth.origins import is_origin_allowed
 from ledgerguard.auth.service import validate_session
@@ -23,6 +25,9 @@ def verify_bearer_token(
     if session_cookie:
         operator, expected_csrf = validate_session(session_cookie)
         if operator:
+            request.state.auth_type = "cookie"
+            request.state.operator = operator
+            request.state.csrf_token = expected_csrf
             # Enforce Origin check and CSRF token on mutating actions when using cookie authentication
             if request.method in ("POST", "PUT", "PATCH", "DELETE"):
                 origin = request.headers.get("origin")
@@ -35,6 +40,12 @@ def verify_bearer_token(
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Invalid or missing CSRF token.",
+                    )
+                # Role-based access control: read-only roles may never mutate state.
+                if operator.role not in WRITE_ROLES:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Role {operator.role} is read-only and cannot perform this action.",
                     )
             return
 
@@ -59,6 +70,8 @@ def verify_bearer_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid or expired bearer token",
         )
+    request.state.auth_type = "bearer"
+    request.state.operator = SYSTEM_OPERATOR
 
 
 def require_idempotency_key(

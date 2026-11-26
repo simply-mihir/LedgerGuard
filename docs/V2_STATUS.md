@@ -128,3 +128,13 @@
 
 - Added `src/ledgerguard/faults/` (TCP fault proxy, out-of-process worker, invariant harness, scenarios), `scripts/run_real_fault_campaign.py`, `tests/test_real_fault_injection.py`, `docs/real_fault_injection.md`, and evidence in `docs/fault_injection/`.
 - Faults: SIGKILL of worker and API processes, network latency/partition/RST, and SIGKILL of PostgreSQL containers; nine ledger invariants plus TLA+ trace conformance are checked after recovery.
+
+## Post-V2 Hardening: Authorization and Input Validation
+
+- Read-only roles (VIEWER, AUDITOR) can no longer perform state-changing requests: `verify_bearer_token` (cookie branch) and the new `require_write_operator` enforce `WRITE_ROLES`. Reads stay open to every authenticated role.
+- Production refuses the demo `API_BEARER_TOKEN` / `INTERNAL_SERVICE_SECRET` (startup validation; token must be >=32 chars).
+- Approval step-up freshness (`auth_age_seconds`) is measured from the server-side session for browser sessions; refund/dispute audit actors are taken from the session.
+- Reconciliation runs are stored in the coordinator table `reconciliation_runs` (migration 009) instead of a process-local dict; the chaos campaign cache is bounded.
+- `/operator/accounts` is paginated (`limit`, `offset`) and reports unreachable-participant accounts as `UNAVAILABLE` instead of silently dropping them.
+- Refund/dispute/approval bodies are validated Pydantic models (malformed input is 422, not 500); refunding an unknown transfer is 404, not 500.
+- Tests: `tests/test_api_authorization.py`.

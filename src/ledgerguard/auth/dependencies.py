@@ -20,6 +20,9 @@ SYSTEM_OPERATOR = OperatorPublicInfo(
 
 COOKIE_SESSION_NAME = "ledgerguard_session"
 
+# Roles allowed to perform state-changing actions. VIEWER and AUDITOR are read-only.
+WRITE_ROLES = frozenset({"OPERATOR", "APPROVER", "ADMIN"})
+
 
 def get_current_operator(
     request: Request,
@@ -86,5 +89,17 @@ def require_operator(
     operator: OperatorPublicInfo = Depends(get_current_operator),
     _: None = Depends(verify_csrf_token),
 ) -> OperatorPublicInfo:
-    """Composite dependency verifying both operator authentication and CSRF token when applicable."""
+    """Composite dependency verifying operator authentication and CSRF token when applicable."""
+    return operator
+
+
+def require_write_operator(
+    operator: OperatorPublicInfo = Depends(require_operator),
+) -> OperatorPublicInfo:
+    """Like require_operator, but rejects read-only roles (VIEWER, AUDITOR)."""
+    if operator.role not in WRITE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Role {operator.role} is read-only and cannot perform this action.",
+        )
     return operator
