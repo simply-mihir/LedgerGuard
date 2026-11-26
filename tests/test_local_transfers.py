@@ -338,13 +338,13 @@ def test_rest_api_transfer_and_reversal_lifecycle():
     """Test full transfer and reversal lifecycle via the FastAPI HTTP endpoints."""
     # 1. Create two accounts
     r1 = client.post(
-        "/v1/accounts", json={"currency": "INR"}, headers={"Idempotency-Key": str(uuid4())}
+        "/v1/accounts", json={"currency": "INR"}, headers={**AUTH_HEADERS, "Idempotency-Key": str(uuid4())}
     )
     assert r1.status_code == 201
     acct1 = r1.json()["account_id"]
 
     r2 = client.post(
-        "/v1/accounts", json={"currency": "INR"}, headers={"Idempotency-Key": str(uuid4())}
+        "/v1/accounts", json={"currency": "INR"}, headers={**AUTH_HEADERS, "Idempotency-Key": str(uuid4())}
     )
     assert r2.status_code == 201
     acct2 = r2.json()["account_id"]
@@ -366,17 +366,17 @@ def test_rest_api_transfer_and_reversal_lifecycle():
             "destination_account_id": acct2,
             "amount_minor": 6000,
         },
-        headers={"Idempotency-Key": idem_key},
+        headers={**AUTH_HEADERS, "Idempotency-Key": idem_key},
     )
     assert rxfer.status_code == 200
     transfer_id = rxfer.json()["transfer_id"]
 
     # 4. Verify balance
-    rb1 = client.get(f"/v1/accounts/{acct1}/balance")
+    rb1 = client.get(f"/v1/accounts/{acct1}/balance", headers=AUTH_HEADERS)
     assert rb1.status_code == 200
     assert rb1.json()["available_balance_minor"] == 9000
 
-    rb2 = client.get(f"/v1/accounts/{acct2}/balance")
+    rb2 = client.get(f"/v1/accounts/{acct2}/balance", headers=AUTH_HEADERS)
     assert rb2.status_code == 200
     assert rb2.json()["available_balance_minor"] == 6000
 
@@ -390,8 +390,8 @@ def test_rest_api_transfer_and_reversal_lifecycle():
     assert rrev.json()["status"] == "REVERSED"
 
     # 6. Verify restored balances
-    assert client.get(f"/v1/accounts/{acct1}/balance").json()["available_balance_minor"] == 15000
-    assert client.get(f"/v1/accounts/{acct2}/balance").json()["available_balance_minor"] == 0
+    assert client.get(f"/v1/accounts/{acct1}/balance", headers=AUTH_HEADERS).json()["available_balance_minor"] == 15000
+    assert client.get(f"/v1/accounts/{acct2}/balance", headers=AUTH_HEADERS).json()["available_balance_minor"] == 0
 
     # 7. Run reconciliation via admin endpoint
     rrec = client.post("/v1/admin/reconciliation-runs", headers=AUTH_HEADERS)
@@ -410,6 +410,7 @@ def test_rest_api_security_and_idempotency_enforcement():
             "destination_account_id": str(uuid4()),
             "amount_minor": 1000,
         },
+        headers=AUTH_HEADERS,
     )
     assert r_no_idem.status_code == 400
 

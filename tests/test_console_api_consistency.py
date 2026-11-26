@@ -17,6 +17,7 @@ from ledgerguard.participant.posting_service import simulate_funding
 
 client = TestClient(app)
 TRUSTED_ORIGIN = "http://localhost:3300"
+AUTH = {"Authorization": f"Bearer {settings.api_bearer_token}"}
 
 
 def _login(role: str) -> dict[str, str]:
@@ -67,15 +68,15 @@ def test_ledger2_account_balance_and_statement_resolve_via_directory() -> None:
     acct_id = UUID(str(acct["account_id"]))
     simulate_funding(settings.ledger2_db_url, acct_id, AmountPaise(12_345))
 
-    bal = client.get(f"/v1/accounts/{acct_id}/balance")
+    bal = client.get(f"/v1/accounts/{acct_id}/balance", headers=AUTH)
     assert bal.status_code == 200, bal.text
     assert bal.json()["posted_balance_minor"] == 12_345
 
-    stmt = client.get(f"/v1/accounts/{acct_id}/statement?limit=10")
+    stmt = client.get(f"/v1/accounts/{acct_id}/statement?limit=10", headers=AUTH)
     assert stmt.status_code == 200, stmt.text
     assert len(stmt.json()["entries"]) >= 1
 
-    assert client.get(f"/v1/accounts/{uuid4()}/balance").status_code == 404
+    assert client.get(f"/v1/accounts/{uuid4()}/balance", headers=AUTH).status_code == 404
 
 
 @pytest.mark.integration
@@ -121,3 +122,38 @@ def test_cookie_mutation_rejects_same_host_different_port_origin() -> None:
         headers={"Cookie": s["cookie"], "Origin": TRUSTED_ORIGIN},
     )
     assert no_csrf.status_code == 403
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", "/v1/customers", {"name": "X", "email": "x@synthetic.local"}),
+        ("POST", "/v1/accounts", {"currency": "INR"}),
+        ("GET", f"/v1/accounts/{UUID(int=1)}/balance", None),
+        ("GET", f"/v1/accounts/{UUID(int=1)}/statement", None),
+        (
+            "POST",
+            "/v1/transfers",
+            {
+                "source_account_id": str(UUID(int=1)),
+                "destination_account_id": str(UUID(int=2)),
+                "amount_minor": 100,
+            },
+        ),
+        ("GET", f"/v1/transfers/{UUID(int=1)}", None),
+        ("GET", "/v1/admin/reconciliation-runs/none", None),
+    ],
+)
+def test_financial_routes_require_authentication(
+    method: str, path: str, body: dict[str, object] | None
+) -> None:
+    """Every money-moving or balance-revealing route rejects anonymous callers."""
+    anon = TestClient(app)
+    headers = {"Idempotency-Key": str(uuid4())}
+    resp = anon.request(method, path, json=body, headers=headers)
+    assert resp.status_code == 401, (path, resp.text)
+    bad = anon.request(
+        method, path, json=body, headers={**headers, "Authorization": "Bearer wrong-token"}
+    )
+    assert bad.status_code == 403, (path, bad.text)

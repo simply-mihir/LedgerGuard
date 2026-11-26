@@ -115,7 +115,7 @@ def resolve_account_ledger_url(account_id: UUID) -> str:
 
 
 @router.post("/customers", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
-def create_customer(req: CreateCustomerRequest) -> CustomerResponse:
+def create_customer(req: CreateCustomerRequest, _: None = Depends(verify_bearer_token)) -> CustomerResponse:
     """Register a new customer record."""
     cust_id = uuid4()
     with get_db_connection(get_coord_db_url()) as conn:
@@ -150,6 +150,7 @@ def create_customer(req: CreateCustomerRequest) -> CustomerResponse:
 def create_account(
     req: CreateAccountRequest,
     idempotency_key: str = Depends(require_idempotency_key),
+    _: None = Depends(verify_bearer_token),
 ) -> AccountResponse:
     """Idempotently create an active customer wallet account."""
     acct = create_ledger_account(
@@ -171,7 +172,7 @@ def create_account(
 
 
 @router.get("/accounts/{account_id}/balance", response_model=AccountResponse)
-def get_balance(account_id: UUID) -> AccountResponse:
+def get_balance(account_id: UUID, _: None = Depends(verify_bearer_token)) -> AccountResponse:
     """Return authoritative posted, held, and available balances for an account."""
     try:
         acct = get_account_balance(resolve_account_ledger_url(account_id), account_id)
@@ -194,6 +195,7 @@ def get_account_statement(
     account_id: UUID,
     cursor: int | None = Query(default=None, alias="cursor"),
     limit: int = Query(default=50, ge=1, le=100),
+    _: None = Depends(verify_bearer_token),
 ) -> StatementResponse:
     """Retrieve chronological statement entries using account-sequence cursor pagination."""
     try:
@@ -370,6 +372,7 @@ def cash_out(
 def create_transfer(
     req: TransferRequest,
     idempotency_key: str = Depends(require_idempotency_key),
+    _: None = Depends(verify_bearer_token),
 ) -> TransferResponse:
     """Submit a wallet transfer with request idempotency and row-level concurrency protection."""
     try:
@@ -405,7 +408,7 @@ def create_transfer(
 
 
 @router.get("/transfers/{transfer_id}", response_model=TransferResponse)
-def get_transfer(transfer_id: UUID) -> TransferResponse:
+def get_transfer(transfer_id: UUID, _: None = Depends(verify_bearer_token)) -> TransferResponse:
     """Retrieve state, journal receipts, and reversal status of a transfer."""
     try:
         details = get_transfer_details(get_ledger_db_url(), transfer_id)
@@ -494,7 +497,7 @@ def trigger_reconciliation(_: None = Depends(verify_bearer_token)) -> Reconcilia
 
 
 @router.get("/admin/reconciliation-runs/{run_id}", response_model=ReconciliationRunResponse)
-def get_reconciliation_run(run_id: str) -> ReconciliationRunResponse:
+def get_reconciliation_run(run_id: str, _: None = Depends(verify_bearer_token)) -> ReconciliationRunResponse:
     """Retrieve details and findings of a previous reconciliation run."""
     if run_id not in _reconciliation_runs:
         raise HTTPException(
