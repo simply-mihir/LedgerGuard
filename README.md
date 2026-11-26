@@ -369,9 +369,9 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 186 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 189 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
-- **Type Checking:** Zero Mypy type violations across 75 source files (`uv run mypy src`)
+- **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
 - **Real Browser E2E Suite:** 93 tests (31 per browser) across Chromium, Firefox, and WebKit (`npx playwright test` in `apps/console`)
 - **Rendered Accessibility:** 0 critical/serious Axe violations; tested against WCAG 2.2 AA criteria (`@axe-core/playwright`)
@@ -431,6 +431,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) | 13 | TCC failure matrix: lost prepare replies, crash after `COMMIT`, crash between confirms, frozen/closed account rejections, idempotency retries. |
 | [`tests/test_dual_control_rbac.py`](tests/test_dual_control_rbac.py) | 4 | Four-eyes approvals, separation of duties, MFA and recent-auth rules. |
 | [`tests/test_durable_workflow.py`](tests/test_durable_workflow.py) | 7 | Transactional outbox polling via `SKIP LOCKED`, durable coordinator decisions, command inbox deduplication, holds reservation lifecycle. |
+| [`tests/test_evidence_provenance.py`](tests/test_evidence_provenance.py) | 3 | Evidence generators refuse dirty trees and record commit SHA, tree OID and clean-tree status. |
 | [`tests/test_history_reconstruction.py`](tests/test_history_reconstruction.py) | 4 | As-of-time balance reconstruction and checksummed snapshots. |
 | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) | 9 | Atomic intra-ledger transfers, idempotency fingerprints, 100 concurrent race spends against balance limit, compensating reversals. |
 | [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
@@ -448,7 +449,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
 | [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **188** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **191** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 
