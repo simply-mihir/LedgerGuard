@@ -117,7 +117,7 @@
 ## Post-V2 Evaluation: Protocol Comparison
 
 - Added `src/ledgerguard/comparison/` (TCC vs XA two-phase commit vs Saga on the same accounting kernel and real PostgreSQL 17), `scripts/run_protocol_comparison.py`, `tests/test_protocol_comparison.py`, `docs/protocol_comparison.md`, and committed evidence in `docs/comparison/`.
-- `docker-compose.yml` now starts the ledger databases with `max_prepared_transactions=64` (required by the XA baseline only; LedgerGuard itself never uses prepared transactions).
+- `docker-compose.xa.yml` is an opt-in override enabling `max_prepared_transactions=64` (required by the XA baseline only; LedgerGuard itself never uses prepared transactions, so the default stack leaves it at 0; CI uses the override).
 
 ## Post-V2 Evaluation: Trace Conformance and Concurrent Formal Model
 
@@ -138,3 +138,8 @@
 - `/operator/accounts` is paginated (`limit`, `offset`) and reports unreachable-participant accounts as `UNAVAILABLE` instead of silently dropping them.
 - Refund/dispute/approval bodies are validated Pydantic models (malformed input is 422, not 500); refunding an unknown transfer is 404, not 500.
 - Tests: `tests/test_api_authorization.py`.
+
+## Post-V2 Hardening: Evidence Provenance and XA Override
+
+- `scripts/run_protocol_comparison.py`, `scripts/run_real_fault_campaign.py` and `scripts/check_trace_conformance.py` now refuse to run on a dirty working tree (`--allow-dirty` to override) and record the full commit SHA, tree OID and `working_tree_clean` in their results (`ledgerguard.evidence`).
+- The default Docker stack no longer enables prepared transactions; the XA baseline uses the opt-in `docker-compose.xa.yml` override (used by CI).

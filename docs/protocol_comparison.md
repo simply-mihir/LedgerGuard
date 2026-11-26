@@ -41,7 +41,7 @@ Scenarios (`src/ledgerguard/comparison/scenarios.py`):
 Reproduce:
 
 ```bash
-docker compose up -d            # ledgers start with max_prepared_transactions=64
+docker compose -f docker-compose.yml -f docker-compose.xa.yml up -d   # ledgers get max_prepared_transactions=64 (XA baseline only)
 uv run python scripts/run_protocol_comparison.py --ops 48 --workers 4
 ```
 

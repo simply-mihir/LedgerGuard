@@ -173,7 +173,7 @@ class XaProtocol:
                 row = conn.execute("SHOW max_prepared_transactions;").fetchone()
             if row is None or int(row[0]) <= 0:
                 raise XaUnavailableError(
-                    f"{lid}: max_prepared_transactions=0; run `docker compose up -d` to "
+                    f"{lid}: max_prepared_transactions=0; run `docker compose -f docker-compose.yml -f docker-compose.xa.yml up -d` to "
                     "recreate ledgers with prepared transactions enabled."
                 )
 

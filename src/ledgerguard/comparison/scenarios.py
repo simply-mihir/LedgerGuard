@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import platform
 import statistics
-import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -28,6 +27,7 @@ from ledgerguard.coordinator.directory_service import provision_account, registe
 from ledgerguard.domain.constants import SYSTEM_CLEARING_ACCOUNT_ID
 from ledgerguard.domain.models import AccountStatus
 from ledgerguard.domain.money import AmountPaise
+from ledgerguard.evidence import collect as collect_provenance
 from ledgerguard.participant.account_service import get_account_balance, set_account_status
 from ledgerguard.participant.posting_service import simulate_funding
 
@@ -88,6 +88,8 @@ class ComparisonReport(BaseModel):
     schema_version: int = 1
     generated_at: str
     git_sha: str
+    git_tree: str = "unknown"
+    working_tree_clean: bool = False
     environment: dict[str, str]
     config: ComparisonConfig
     throughput: list[ThroughputResult]
@@ -98,7 +100,7 @@ class ComparisonReport(BaseModel):
         lines = [
             "# Protocol comparison: TCC vs XA 2PC vs Saga",
             "",
-            f"- Generated: `{self.generated_at}` at commit `{self.git_sha}`",
+            f"- Generated: `{self.generated_at}` at commit `{self.git_sha}` (tree `{self.git_tree}`, clean={self.working_tree_clean})",
             f"- Environment: {self.environment}",
             f"- Config: ops={self.config.ops}, workers={self.config.workers}, "
             f"amount={self.config.amount_minor} paise",
@@ -364,15 +366,9 @@ def _failure(proto: TransferProtocol, cfg: ComparisonConfig) -> FailureResult:
 # ---------------------------------------------------------------------------
 
 
-def _git_sha() -> str:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    except Exception:
-        return "unknown"
-
-
 def run_comparison(cfg: ComparisonConfig | None = None) -> ComparisonReport:
     cfg = cfg or ComparisonConfig()
+    _prov = collect_provenance()
     urls = _urls()
     available: dict[str, TransferProtocol] = {
         "TCC": TccProtocol(settings.coordinator_db_url, urls),
@@ -387,7 +383,9 @@ def run_comparison(cfg: ComparisonConfig | None = None) -> ComparisonReport:
         pg = conn.execute("SHOW server_version;").fetchone()
     return ComparisonReport(
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        git_sha=_git_sha(),
+        git_sha=_prov.git_sha,
+        git_tree=_prov.git_tree,
+        working_tree_clean=_prov.working_tree_clean,
         environment={
             "python": platform.python_version(),
             "platform": platform.platform(),

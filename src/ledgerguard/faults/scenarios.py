@@ -22,6 +22,7 @@ import psycopg
 from pydantic import BaseModel, Field
 
 from ledgerguard.config import settings
+from ledgerguard.evidence import collect as collect_provenance
 from ledgerguard.faults.harness import (
     FaultEnv,
     InvariantResult,
@@ -57,6 +58,8 @@ class FaultCampaignReport(BaseModel):
     schema_version: int = 1
     generated_at: str
     git_sha: str
+    git_tree: str = "unknown"
+    working_tree_clean: bool = False
     seed: int
     environment: dict[str, str]
     scenarios: list[ScenarioResult]
@@ -69,7 +72,7 @@ class FaultCampaignReport(BaseModel):
         lines = [
             "# Real fault-injection campaign",
             "",
-            f"- Generated `{self.generated_at}` at commit `{self.git_sha}`, seed `{self.seed}`",
+            f"- Generated `{self.generated_at}` at commit `{self.git_sha}` (tree `{self.git_tree}`, clean={self.working_tree_clean}), seed `{self.seed}`",
             f"- Environment: {self.environment}",
             f"- **Overall: {'PASS' if self.passed else 'FAIL'}**",
             "",
@@ -387,14 +390,8 @@ def postgres_crash(service: str, url: str) -> ScenarioResult:
 # ---------------------------------------------------------------------------
 
 
-def _git_sha() -> str:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, cwd=REPO_ROOT).strip()
-    except Exception:
-        return "unknown"
-
-
 def run_campaign(seed: int = 42, include_containers: bool = False) -> FaultCampaignReport:
+    prov = collect_provenance()
     results = [
         kill_after_durable_commit(),
         random_kill_burst(seed),
@@ -409,7 +406,8 @@ def run_campaign(seed: int = 42, include_containers: bool = False) -> FaultCampa
     with psycopg.connect(settings.ledger1_db_url) as conn:
         pg = conn.execute("SHOW server_version").fetchone()
     return FaultCampaignReport(
-        generated_at=datetime.now(UTC).isoformat(timespec="seconds"), git_sha=_git_sha(), seed=seed,
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"), git_sha=prov.git_sha, git_tree=prov.git_tree,
+        working_tree_clean=prov.working_tree_clean, seed=seed,
         environment={"python": platform.python_version(), "platform": platform.platform(),
                      "postgres": str(pg[0]) if pg else "unknown"},
         scenarios=results,

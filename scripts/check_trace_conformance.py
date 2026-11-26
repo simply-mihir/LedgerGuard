@@ -13,13 +13,17 @@ from ledgerguard.config import settings
 from ledgerguard.conformance import check_trace, fetch_traces
 from ledgerguard.conformance.corpus import is_benign_accept, mutations
 from ledgerguard.conformance.tla_trace import tlc_accepts, tlc_available
+from ledgerguard.evidence import require_clean_tree
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tlc", action="store_true", help="cross-check unique traces with TLC")
     parser.add_argument("--out-dir", type=Path, default=Path("docs/conformance"))
+    parser.add_argument("--allow-dirty", action="store_true",
+                        help="run on an uncommitted tree (recorded as working_tree_clean=false)")
     args = parser.parse_args()
+    prov = require_clean_tree(args.allow_dirty)
 
     traces = fetch_traces(settings.coordinator_db_url)
     results = {t.transfer_id: check_trace(list(t.tokens)) for t in traces}
@@ -51,6 +55,8 @@ def main() -> int:
             raise SystemExit(f"checker disagrees with TLC on {len(sample) - tlc_agree} traces")
 
     report = {
+        "source": {"git_sha": prov.git_sha, "git_tree": prov.git_tree,
+                   "working_tree_clean": prov.working_tree_clean},
         "transfers_checked": len(traces),
         "accepted": len(traces) - len(rejected),
         "rejected": [str(t.transfer_id) for t in rejected],

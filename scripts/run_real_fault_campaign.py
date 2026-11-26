@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from ledgerguard.evidence import require_clean_tree
 from ledgerguard.faults.scenarios import report_json, run_campaign
 
 
@@ -18,7 +19,10 @@ def main() -> int:
              "briefly takes those shared dev databases down)",
     )
     parser.add_argument("--out-dir", type=Path, default=Path("docs/fault_injection"))
+    parser.add_argument("--allow-dirty", action="store_true",
+                        help="run on an uncommitted tree (recorded as working_tree_clean=false)")
     args = parser.parse_args()
+    require_clean_tree(args.allow_dirty)
 
     report = run_campaign(seed=args.seed, include_containers=args.containers)
     args.out_dir.mkdir(parents=True, exist_ok=True)

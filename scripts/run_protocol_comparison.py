@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ledgerguard.comparison import ComparisonConfig, run_comparison
 from ledgerguard.comparison.scenarios import report_json
+from ledgerguard.evidence import require_clean_tree
 
 
 def main() -> int:
@@ -16,7 +17,10 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--bystander-timeout-ms", type=int, default=1500)
     parser.add_argument("--out-dir", type=Path, default=Path("docs/comparison"))
+    parser.add_argument("--allow-dirty", action="store_true",
+                        help="run on an uncommitted tree (recorded as working_tree_clean=false)")
     args = parser.parse_args()
+    require_clean_tree(args.allow_dirty)
 
     report = run_comparison(
         ComparisonConfig(
