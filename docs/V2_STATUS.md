@@ -5,8 +5,8 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 9 — Four-eyes approval and RBAC (Complete)
-- **Next Stage:** Stage 10 — Concurrency and performance study
+- **Current Stage:** Stage 10 — Concurrency and performance study (Complete)
+- **Next Stage:** Stage 11 — Adaptive backpressure and circuit breaking
 
 ## Stage Checklist
 
@@ -20,7 +20,7 @@
 - [x] **Stage 7:** As-of-time balance reconstruction
 - [x] **Stage 8:** Reversals, refunds and chargebacks
 - [x] **Stage 9:** Four-eyes approval and RBAC
-- [ ] **Stage 10:** Concurrency and performance study
+- [x] **Stage 10:** Concurrency and performance study
 - [ ] **Stage 11:** Adaptive backpressure and circuit breaking
 - [ ] **Stage 12:** Disaster recovery and restore verification
 
@@ -78,6 +78,10 @@
 - Added forward migration `migrations/coordinator/007_four_eyes_approvals_and_rbac.sql` (`VIEWER`, `OPERATOR`, `APPROVER`, `AUDITOR`, `ADMIN` roles, `approval_requests`, immutable `approval_events` trigger).
 - Implemented `src/ledgerguard/approval/service.py` enforcing separation of duties, MFA + recent-auth checks, SHA-256 payload immutability, expiry, and idempotent execution.
 - Added `/v1/operator/approvals` endpoints, Operator Console `/console/approvals`, `docs/dual_control.md`, and `tests/test_dual_control_rbac.py`.
+
+### Stage 10
+- Implemented reproducible 12-profile concurrency & performance study (`src/ledgerguard/perf/study.py`, `scripts/run_v2_perf_study.py`) with fixed seed, warmup/measured windows, percentile latencies (P50/P95/P99/Max), throughput, error/deadlock/retry tracking, and raw CSV/JSON/SVG/Markdown artifacts.
+- Published baseline report (`docs/performance/v2_baseline.md`) and `tests/test_perf_study.py`.
 
 ## Baseline Verification Evidence
 
