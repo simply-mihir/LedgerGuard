@@ -18,7 +18,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TLA_DIR="${ROOT_DIR}/formal/tla"
 OUT_DIR="${TLA_DIR}/states_tmp"
 mkdir -p "$OUT_DIR"
-trap 'rm -rf "$OUT_DIR" "${TLA_DIR}"/*_TTrace_*.tla' EXIT
+trap 'rm -rf "$OUT_DIR" "${TLA_DIR}"/*_TTrace_*' EXIT
 
 echo "=== Running TLC Model Checker on LedgerGuardTCC.tla ==="
 java -XX:+UseParallelGC -cp "$JAR_PATH" tlc2.TLC \
