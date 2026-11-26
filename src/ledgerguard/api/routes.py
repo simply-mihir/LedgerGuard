@@ -1172,3 +1172,13 @@ def export_operator_approvals(
     from ledgerguard.approval import export_approval_audit
 
     return export_approval_audit(settings.coordinator_db_url)
+
+
+@router.get("/operator/resilience")
+def get_operator_resilience(
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return per-participant circuit breaker and backpressure health telemetry."""
+    from ledgerguard.resilience import ParticipantResilienceController
+
+    return ParticipantResilienceController(settings.coordinator_db_url).get_health_snapshot()

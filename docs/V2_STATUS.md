@@ -5,8 +5,8 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 10 — Concurrency and performance study (Complete)
-- **Next Stage:** Stage 11 — Adaptive backpressure and circuit breaking
+- **Current Stage:** Stage 11 — Adaptive backpressure and circuit breaking (Complete)
+- **Next Stage:** Stage 12 — Disaster recovery and restore verification
 
 ## Stage Checklist
 
@@ -21,7 +21,7 @@
 - [x] **Stage 8:** Reversals, refunds and chargebacks
 - [x] **Stage 9:** Four-eyes approval and RBAC
 - [x] **Stage 10:** Concurrency and performance study
-- [ ] **Stage 11:** Adaptive backpressure and circuit breaking
+- [x] **Stage 11:** Adaptive backpressure and circuit breaking
 - [ ] **Stage 12:** Disaster recovery and restore verification
 
 ## Completed Work
@@ -82,6 +82,11 @@
 ### Stage 10
 - Implemented reproducible 12-profile concurrency & performance study (`src/ledgerguard/perf/study.py`, `scripts/run_v2_perf_study.py`) with fixed seed, warmup/measured windows, percentile latencies (P50/P95/P99/Max), throughput, error/deadlock/retry tracking, and raw CSV/JSON/SVG/Markdown artifacts.
 - Published baseline report (`docs/performance/v2_baseline.md`) and `tests/test_perf_study.py`.
+
+### Stage 11
+- Added forward migration `migrations/coordinator/008_resilience_circuit_state.sql` (`participant_resilience_state`, `resilience_audit_events`).
+- Implemented `src/ledgerguard/resilience/circuit_breaker.py` with `CLOSED`/`OPEN`/`HALF_OPEN` transitions, bounded exponential backoff + jitter, hot-account rate limiting, and forward-recovery isolation.
+- Added `/v1/operator/resilience`, Operator Console `/console/resilience`, `docs/backpressure.md`, and `tests/test_resilience_backpressure.py`.
 
 ## Baseline Verification Evidence
 
