@@ -86,6 +86,14 @@ class Settings(BaseSettings):
     worker_batch_size: int = Field(default=20, alias="WORKER_BATCH_SIZE")
     worker_lock_timeout_seconds: int = Field(default=10, alias="WORKER_LOCK_TIMEOUT_SECONDS")
 
+    # Observability / OpenTelemetry
+    otel_exporter: Literal["none", "console", "otlp", "memory"] = Field(
+        default="memory", alias="LEDGERGUARD_OTEL_EXPORTER"
+    )
+    otel_endpoint: str = Field(
+        default="http://localhost:4318/v1/traces", alias="OTEL_EXPORTER_OTLP_ENDPOINT"
+    )
+
     def get_trusted_origins(self) -> list[str]:
         """Return validated list of complete trusted origins.
 

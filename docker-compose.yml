@@ -56,6 +56,14 @@ services:
       retries: 10
       start_period: 2s
 
+  # Optional OpenTelemetry / Jaeger viewer (enabled via: docker compose --profile observability up -d)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4318:4318"
+
 volumes:
   coordinator_data:
   ledger1_data:

@@ -3,12 +3,13 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from ledgerguard.api.auth_routes import auth_router
 from ledgerguard.api.routes import router
 from ledgerguard.db.pool import close_all_pools
+from ledgerguard.observability import extract_trace_context, inject_trace_carrier, safe_span
 
 
 @asynccontextmanager
@@ -36,6 +37,20 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def trace_context_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+        parent_ctx = extract_trace_context(dict(request.headers))
+        with safe_span(
+            f"http.{request.method}",
+            attributes={"http.method": request.method, "http.route": request.url.path},
+            parent_context=parent_ctx,
+        ):
+            response = await call_next(request)
+            carrier = inject_trace_carrier()
+            if "traceparent" in carrier:
+                response.headers["traceparent"] = carrier["traceparent"]
+            return response
 
     @app.get("/health", tags=["System"])
     def health_check() -> dict[str, str]:

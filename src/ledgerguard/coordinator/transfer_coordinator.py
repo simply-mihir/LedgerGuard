@@ -14,6 +14,7 @@ from ledgerguard.coordinator.failpoints import failpoints as default_failpoints
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.idempotency import IdempotencyConflictError, compute_payload_hash
 from ledgerguard.domain.money import AmountPaise
+from ledgerguard.observability import amount_bucket, safe_span
 from ledgerguard.worker.orchestrator import execute_two_phase_commit
 
 
@@ -38,25 +39,61 @@ def submit_coordinator_transfer(
     payload_hash = compute_payload_hash(payload_dict)
     t_id = transfer_id or uuid4()
 
-    # 1. Check idempotency record
-    with get_db_connection(coord_db_url) as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT idempotency_key, payload_hash, status_code, response_body, resource_id
-                FROM api_idempotency
-                WHERE idempotency_key = %s AND operation_namespace = 'TRANSFERS';
-            """,
-                (idempotency_key,),
-            )
-            existing_rec = cur.fetchone()
+    with safe_span(
+        "coordinator.submit_transfer",
+        attributes={
+            "transfer.id": str(t_id),
+            "operation.type": "TRANSFER",
+            "amount.bucket": amount_bucket(amount.paise),
+        },
+    ):
+        return _submit_coordinator_transfer_inner(
+            coord_db_url=coord_db_url,
+            ledger_db_urls=ledger_db_urls,
+            idempotency_key=idempotency_key,
+            source_account_id=source_account_id,
+            destination_account_id=destination_account_id,
+            amount=amount,
+            currency=currency,
+            t_id=t_id,
+            payload_hash=payload_hash,
+            failpoint_mgr=failpoint_mgr,
+        )
 
-            if existing_rec:
-                if existing_rec["payload_hash"] != payload_hash:
-                    raise IdempotencyConflictError(
-                        f"Idempotency conflict: key '{idempotency_key}' reused with different payload."
-                    )
-                return dict(existing_rec["response_body"])
+
+def _submit_coordinator_transfer_inner(
+    *,
+    coord_db_url: str,
+    ledger_db_urls: dict[str, str],
+    idempotency_key: str,
+    source_account_id: UUID,
+    destination_account_id: UUID,
+    amount: AmountPaise,
+    currency: str,
+    t_id: UUID,
+    payload_hash: str,
+    failpoint_mgr: FailpointManager | None,
+) -> dict[str, Any]:
+    # 1. Check idempotency record
+    with safe_span("idempotency.lookup", attributes={"transfer.id": str(t_id)}):
+        with get_db_connection(coord_db_url) as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT idempotency_key, payload_hash, status_code, response_body, resource_id
+                    FROM api_idempotency
+                    WHERE idempotency_key = %s AND operation_namespace = 'TRANSFERS';
+                """,
+                    (idempotency_key,),
+                )
+                existing_rec = cur.fetchone()
+
+                if existing_rec:
+                    if existing_rec["payload_hash"] != payload_hash:
+                        raise IdempotencyConflictError(
+                            f"Idempotency conflict: key '{idempotency_key}' reused with different payload."
+                        )
+                    return dict(existing_rec["response_body"])
 
     # 2. Look up account directory routing
     source_routing = get_account_routing(coord_db_url, source_account_id)

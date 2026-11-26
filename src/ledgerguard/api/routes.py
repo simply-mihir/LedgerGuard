@@ -866,3 +866,25 @@ def create_operator_audit_checkpoint(
     url = settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
     res = create_journal_checkpoint(url, settings.coordinator_db_url, ledger_id)
     return res.model_dump()
+
+
+@router.get("/operator/traces")
+def get_operator_traces(
+    limit: int = Query(default=30, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return recent distributed trace summaries."""
+    from ledgerguard.observability import list_recent_traces
+
+    return list_recent_traces(limit=limit)
+
+
+@router.get("/operator/transfers/{transfer_id}/trace")
+def get_operator_transfer_trace(
+    transfer_id: UUID,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Return span waterfall and latency metrics for a specific transfer."""
+    from ledgerguard.observability import get_trace_waterfall_for_transfer
+
+    return get_trace_waterfall_for_transfer(str(transfer_id))

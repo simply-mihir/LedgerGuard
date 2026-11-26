@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.idempotency import compute_payload_hash
+from ledgerguard.observability import safe_span
 
 
 def handle_source_prepare(
@@ -35,27 +36,33 @@ def handle_source_prepare(
         }
     )
 
-    with get_db_connection(db_url) as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT source_prepare(
-                    %s, %s, %s, %s, %s, %s, %s
-                ) AS result;
-            """,
-                (
-                    command_id,
-                    transfer_id,
-                    source_account_id,
-                    target_dest,
-                    amount_minor,
-                    currency,
-                    payload_hash,
-                ),
-            )
-            row = cur.fetchone()
-            result = row["result"] if row else {}
-        conn.commit()
+    with safe_span(
+        "tcc.source_prepare",
+        attributes={"transfer.id": str(transfer_id), "command.id": command_id, "operation.type": "SOURCE_PREPARE"},
+    ) as span:
+        with get_db_connection(db_url) as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT source_prepare(
+                        %s, %s, %s, %s, %s, %s, %s
+                    ) AS result;
+                """,
+                    (
+                        command_id,
+                        transfer_id,
+                        source_account_id,
+                        target_dest,
+                        amount_minor,
+                        currency,
+                        payload_hash,
+                    ),
+                )
+                row = cur.fetchone()
+                result = row["result"] if row else {}
+            conn.commit()
+        if span and isinstance(result, dict) and result.get("duplicate"):
+            span.set_attribute("inbox.duplicate_ignored", True)
 
     return dict(result)
 

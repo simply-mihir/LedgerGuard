@@ -17,6 +17,7 @@ const NAV_GROUPS: {
       { href: '/console', label: 'Platform Overview', icon: 'M3 3h7v9H3zm11 0h7v5h-7zm0 8h7v9h-7zM3 15h7v5H3z' },
       { href: '/console/accounts', label: 'Accounts & Ledgers', icon: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
       { href: '/console/transfers', label: 'TCC Transfers', icon: 'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3' },
+      { href: '/console/traces', label: 'Traces', icon: 'M3 12h4l3-9 4 18 3-9h4' },
       { href: '/console/reconciliation', label: 'Reconciliation', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4' },
     ],
   },

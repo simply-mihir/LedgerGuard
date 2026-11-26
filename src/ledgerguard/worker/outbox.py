@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from ledgerguard.db.pool import get_db_connection
+from ledgerguard.observability import inject_trace_carrier, safe_span
 
 
 def record_outbox_event(
@@ -18,20 +19,23 @@ def record_outbox_event(
     payload: dict[str, Any],
 ) -> UUID:
     """Insert an outbox event within an existing open database transaction."""
-    with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(
-            f"""
-            INSERT INTO {table_name} (
-                aggregate_id, event_type, payload, attempts, next_attempt_at, created_at
-            ) VALUES (%s, %s, %s, 0, NOW(), NOW())
-            RETURNING outbox_id;
-        """,
-            (aggregate_id, event_type, Jsonb(payload)),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise RuntimeError("Failed to insert outbox event")
-        return UUID(str(row["outbox_id"]))
+    enriched_payload = dict(payload)
+    enriched_payload["_trace"] = inject_trace_carrier()
+    with safe_span("outbox.enqueue", attributes={"transfer.id": aggregate_id, "operation.type": event_type}):
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""
+                INSERT INTO {table_name} (
+                    aggregate_id, event_type, payload, attempts, next_attempt_at, created_at
+                ) VALUES (%s, %s, %s, 0, NOW(), NOW())
+                RETURNING outbox_id;
+            """,
+                (aggregate_id, event_type, Jsonb(enriched_payload)),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise RuntimeError("Failed to insert outbox event")
+            return UUID(str(row["outbox_id"]))
 
 
 def claim_pending_outbox_events(

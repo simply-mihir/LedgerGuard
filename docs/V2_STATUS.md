@@ -5,8 +5,8 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 4 — Tamper-evident audit journal (Complete)
-- **Next Stage:** Stage 5 — End-to-end OpenTelemetry tracing
+- **Current Stage:** Stage 5 — End-to-end OpenTelemetry tracing (Complete)
+- **Next Stage:** Stage 6 — Explainable recovery diagnostics
 
 ## Stage Checklist
 
@@ -15,7 +15,7 @@
 - [x] **Stage 2:** Automated chaos campaign engine
 - [x] **Stage 3:** TLA+ formal specification
 - [x] **Stage 4:** Tamper-evident audit journal
-- [ ] **Stage 5:** End-to-end OpenTelemetry tracing
+- [x] **Stage 5:** End-to-end OpenTelemetry tracing
 - [ ] **Stage 6:** Explainable recovery diagnostics
 - [ ] **Stage 7:** As-of-time balance reconstruction
 - [ ] **Stage 8:** Reversals, refunds and chargebacks
@@ -54,6 +54,11 @@
 - Added forward migrations `migrations/ledger/007_tamper_evident_journal_chain.sql` (transactional SHA-256 hash chain, `journal_chain_head` concurrency lock, `journal_checkpoints`, and backfill) and `migrations/coordinator/005_journal_checkpoint_attestations.sql`.
 - Implemented `src/ledgerguard/audit/journal_chain.py` with canonical hash verification, Merkle root computation, coordinator attestation, and CLI commands (`verify-journal-chain`, `create-journal-checkpoint`, `verify-journal-checkpoint`, `verify-all-ledgers`).
 - Added `/v1/operator/audit/verify`, `/v1/operator/audit/checkpoint`, Operator Console `/console/audit` view, `scripts/demo_tamper_detection.sh`, `docs/tamper_evident_journal.md`, and `tests/test_tamper_evident_journal.py`.
+
+### Stage 5
+- Added OpenTelemetry tracing subsystem (`src/ledgerguard/observability/tracing.py`) supporting `none`, `console`, `otlp`, and `memory` exporters, W3C `traceparent` propagation, coarse `amount_bucket()`, and automatic sensitive-attribute redaction.
+- Instrumented HTTP middleware, coordinator transfer submission, idempotency lookup, outbox enqueue, participant `source_prepare`, forward recovery (`recovery.retry_transfer`), and cross-ledger reconciliation.
+- Added `/v1/operator/traces`, `/v1/operator/transfers/{transfer_id}/trace`, Operator Console `/console/traces` view, optional `jaeger` Compose profile, `docs/observability.md`, and `tests/test_tracing.py`.
 
 ## Baseline Verification Evidence
 

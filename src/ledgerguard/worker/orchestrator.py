@@ -15,6 +15,7 @@ from ledgerguard.coordinator.failpoints import (
     failpoints as default_failpoints,
 )
 from ledgerguard.db.pool import get_db_connection
+from ledgerguard.observability import extract_trace_context, inject_trace_carrier, safe_span
 from ledgerguard.participant.workflow_handler import (
     handle_destination_confirm,
     handle_destination_prepare,
@@ -40,6 +41,11 @@ def record_workflow_event(
     """Append an event to coordinator workflow_events audit table."""
     from psycopg.types.json import Jsonb
 
+    enriched = dict(details or {})
+    carrier = inject_trace_carrier()
+    if carrier:
+        enriched["_trace"] = carrier
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -47,7 +53,7 @@ def record_workflow_event(
             VALUES (%s, %s, %s, NOW())
             ON CONFLICT (transfer_id, event_type) DO NOTHING;
         """,
-            (transfer_id, event_type, Jsonb(details or {})),
+            (transfer_id, event_type, Jsonb(enriched)),
         )
 
 
@@ -60,6 +66,11 @@ def record_workflow_event_once(
     """Append an event to coordinator workflow_events audit table if not already recorded."""
     from psycopg.types.json import Jsonb
 
+    enriched = dict(details or {})
+    carrier = inject_trace_carrier()
+    if carrier:
+        enriched["_trace"] = carrier
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -67,7 +78,7 @@ def record_workflow_event_once(
             VALUES (%s, %s, %s, NOW())
             ON CONFLICT (transfer_id, event_type) DO NOTHING;
         """,
-            (transfer_id, event_type, Jsonb(details or {})),
+            (transfer_id, event_type, Jsonb(enriched)),
         )
 
 
@@ -440,9 +451,24 @@ def recover_pending_transfers(
 
     for row in pending:
         t_id = UUID(str(row["transfer_id"]))
+        parent_ctx = None
         try:
-            res = execute_two_phase_commit(coord_db_url, t_id, ledger_db_urls)
-            results.append(res)
+            with get_db_connection(coord_db_url) as conn:
+                with conn.cursor(row_factory=dict_row) as cur:
+                    cur.execute(
+                        "SELECT details FROM workflow_events WHERE transfer_id = %s ORDER BY created_at ASC LIMIT 1;",
+                        (t_id,),
+                    )
+                    ev = cur.fetchone()
+                    if ev and isinstance(ev.get("details"), dict):
+                        parent_ctx = extract_trace_context(ev["details"].get("_trace"))
+            with safe_span(
+                "recovery.retry_transfer",
+                attributes={"transfer.id": str(t_id), "recovery.flag": True, "state.before": row.get("state")},
+                parent_context=parent_ctx,
+            ):
+                res = execute_two_phase_commit(coord_db_url, t_id, ledger_db_urls)
+                results.append(res)
         except Exception as exc:
             logger.error("Error recovering transfer %s: %s", t_id, exc)
 
