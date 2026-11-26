@@ -4,9 +4,9 @@
     "postgres": "17.11",
     "python": "3.12.13"
   },
-  "generated_at": "2026-11-26T10:56:04+00:00",
-  "git_sha": "f4974d5fbfb4f5332594f5395577b2c7f6c82005",
-  "git_tree": "99b1d2bf9fbb15de4a242b14cbfbd716cc5d4933",
+  "generated_at": "2026-11-26T18:56:04+00:00",
+  "git_sha": "f6bfa2d3bba56398ca75c3fc92e6697cccb7c002",
+  "git_tree": "7da536a6ef9abf1da91bc57fbfe985d5b2f2a19a",
   "scenarios": [
     {
       "cancelled": 0,
@@ -66,7 +66,7 @@
       ],
       "name": "SIGKILL after durable COMMIT",
       "recovered_by_recovery_loop": 4,
-      "seconds": 21.27,
+      "seconds": 34.08,
       "settled": 4,
       "transfers": 4
     },
@@ -80,7 +80,7 @@
       ],
       "invariants": [
         {
-          "detail": "15 transfers, 0 not terminal",
+          "detail": "9 transfers, 0 not terminal",
           "name": "all_transfers_terminal",
           "passed": true
         },
@@ -100,12 +100,12 @@
           "passed": true
         },
         {
-          "detail": "15 transfers checked",
+          "detail": "9 transfers checked",
           "name": "single_settlement_per_transfer",
           "passed": true
         },
         {
-          "detail": "15 decisions, 0 inconsistent",
+          "detail": "9 decisions, 0 inconsistent",
           "name": "decision_never_reverted",
           "passed": true
         },
@@ -127,9 +127,9 @@
       ],
       "name": "Random SIGKILL burst",
       "recovered_by_recovery_loop": 4,
-      "seconds": 13.42,
-      "settled": 15,
-      "transfers": 15
+      "seconds": 26.72,
+      "settled": 9,
+      "transfers": 9
     },
     {
       "cancelled": 0,
@@ -190,14 +190,14 @@
       ],
       "name": "Network latency",
       "recovered_by_recovery_loop": 0,
-      "seconds": 44.04,
+      "seconds": 79.4,
       "settled": 8,
       "transfers": 8
     },
     {
       "cancelled": 0,
       "facts": {
-        "bytes_dropped_by_partition": 11,
+        "bytes_dropped_by_partition": 6,
         "progress_during_partition": 0
       },
       "faults": [
@@ -253,7 +253,7 @@
       ],
       "name": "Partition of destination ledger",
       "recovered_by_recovery_loop": 1,
-      "seconds": 15.07,
+      "seconds": 41.42,
       "settled": 3,
       "transfers": 3
     },
@@ -261,10 +261,203 @@
       "cancelled": 0,
       "facts": {
         "connections_reset": 30,
-        "worker_errors": 12
+        "worker_errors": 2
       },
       "faults": [
         "RST on live connections, random link"
+      ],
+      "invariants": [
+        {
+          "detail": "12 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "12 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "12 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "TCP reset storm",
+      "recovered_by_recovery_loop": 2,
+      "seconds": 62.96,
+      "settled": 12,
+      "transfers": 12
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "chunks_or_streams_damaged": 1,
+        "clean_transfers_before_damage": 2,
+        "seed": 42,
+        "worker_finished_under_fault": false
+      },
+      "faults": [
+        "bit flips in 15% of chunks"
+      ],
+      "invariants": [
+        {
+          "detail": "2 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "2 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "2 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Byte corruption",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 55.6,
+      "settled": 2,
+      "transfers": 2
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "chunks_or_streams_damaged": 1,
+        "clean_transfers_before_damage": 2,
+        "seed": 42,
+        "worker_finished_under_fault": false
+      },
+      "faults": [
+        "20% adjacent-chunk swaps",
+        "10% duplicated chunks"
+      ],
+      "invariants": [
+        {
+          "detail": "2 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "2 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "2 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Chunk reorder + duplicate",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 50.01,
+      "settled": 2,
+      "transfers": 2
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "chunks_or_streams_damaged": 13,
+        "clean_transfers_before_damage": 2,
+        "seed": 42,
+        "worker_finished_under_fault": true
+      },
+      "faults": [
+        "stream cut + RST after 1.5 KB"
       ],
       "invariants": [
         {
@@ -313,17 +506,17 @@
           "passed": true
         }
       ],
-      "name": "TCP reset storm",
-      "recovered_by_recovery_loop": 6,
-      "seconds": 11.7,
+      "name": "Mid-message truncation",
+      "recovered_by_recovery_loop": 4,
+      "seconds": 24.47,
       "settled": 6,
       "transfers": 6
     },
     {
       "cancelled": 0,
       "facts": {
-        "acked_before_crash": 18,
-        "unacked_replayed": 12
+        "acked_before_crash": 20,
+        "unacked_replayed": 10
       },
       "faults": [
         "kill -9 API mid-burst",
@@ -346,7 +539,7 @@
           "passed": true
         },
         {
-          "detail": "18 acks before the crash all match after restart",
+          "detail": "20 acks before the crash all match after restart",
           "name": "acknowledged_transfers_preserved",
           "passed": true
         },
@@ -358,7 +551,7 @@
       ],
       "name": "API SIGKILL + idempotent replay",
       "recovered_by_recovery_loop": 0,
-      "seconds": 4.22,
+      "seconds": 4.04,
       "settled": 30,
       "transfers": 30
     },
@@ -420,8 +613,8 @@
         }
       ],
       "name": "PostgreSQL SIGKILL (postgres-ledger2)",
-      "recovered_by_recovery_loop": 3,
-      "seconds": 16.07,
+      "recovered_by_recovery_loop": 0,
+      "seconds": 27.65,
       "settled": 12,
       "transfers": 12
     },
@@ -437,7 +630,7 @@
       ],
       "invariants": [
         {
-          "detail": "10 transfers, 0 not terminal",
+          "detail": "11 transfers, 0 not terminal",
           "name": "all_transfers_terminal",
           "passed": true
         },
@@ -457,12 +650,12 @@
           "passed": true
         },
         {
-          "detail": "10 transfers checked",
+          "detail": "11 transfers checked",
           "name": "single_settlement_per_transfer",
           "passed": true
         },
         {
-          "detail": "10 decisions, 0 inconsistent",
+          "detail": "11 decisions, 0 inconsistent",
           "name": "decision_never_reverted",
           "passed": true
         },
@@ -483,10 +676,10 @@
         }
       ],
       "name": "PostgreSQL SIGKILL (postgres-coordinator)",
-      "recovered_by_recovery_loop": 1,
-      "seconds": 18.1,
-      "settled": 10,
-      "transfers": 10
+      "recovered_by_recovery_loop": 0,
+      "seconds": 27.78,
+      "settled": 11,
+      "transfers": 11
     }
   ],
   "schema_version": 1,
