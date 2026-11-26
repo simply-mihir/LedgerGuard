@@ -69,8 +69,9 @@ from ledgerguard.worker.orchestrator import recover_pending_transfers
 
 router = APIRouter(prefix="/v1")
 
-# Global in-memory cache for recent reconciliation runs
+# Global in-memory cache for recent reconciliation runs and chaos campaigns
 _reconciliation_runs: dict[str, ReconciliationRunResponse] = {}
+_chaos_campaigns: dict[str, dict[str, Any]] = {}
 
 
 def get_ledger_db_url() -> str:
@@ -810,3 +811,35 @@ def run_operator_experiment(
             detail=f"Unknown scenario '{req.scenario}'.",
         )
 
+
+@router.post("/operator/chaos/run")
+def run_operator_chaos_campaign(
+    config: dict[str, Any] | None = None,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Execute a bounded deterministic chaos campaign in non-production environments."""
+    if settings.env == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chaos campaigns are disabled in production environment.",
+        )
+
+    from ledgerguard.chaos import ChaosCampaignConfig, ChaosCampaignEngine
+
+    cfg = ChaosCampaignConfig.model_validate(config or {})
+    report = ChaosCampaignEngine(
+        coord_db_url=settings.coordinator_db_url,
+        ledger1_db_url=settings.ledger1_db_url,
+        ledger2_db_url=settings.ledger2_db_url,
+    ).run(cfg)
+    payload = report.model_dump()
+    _chaos_campaigns[report.campaign_id] = payload
+    return payload
+
+
+@router.get("/operator/chaos/campaigns")
+def list_operator_chaos_campaigns(
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return recent chaos campaign reports."""
+    return list(reversed(list(_chaos_campaigns.values())))

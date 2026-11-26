@@ -5,14 +5,14 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 1 — Independent reference model and history checker (Complete)
-- **Next Stage:** Stage 2 — Automated chaos campaign engine
+- **Current Stage:** Stage 2 — Automated chaos campaign engine (Complete)
+- **Next Stage:** Stage 3 — TLA+ formal specification
 
 ## Stage Checklist
 
 - [x] **Stage 0:** Repository and branch preparation
 - [x] **Stage 1:** Independent reference model and history checker
-- [ ] **Stage 2:** Automated chaos campaign engine
+- [x] **Stage 2:** Automated chaos campaign engine
 - [ ] **Stage 3:** TLA+ formal specification
 - [ ] **Stage 4:** Tamper-evident audit journal
 - [ ] **Stage 5:** End-to-end OpenTelemetry tracing
@@ -37,6 +37,12 @@
 - Defined canonical execution history schema (`src/ledgerguard/reference/history.py`) and step-by-step history checker (`src/ledgerguard/reference/checker.py`) checking intermediate states, decision monotonicity, journal balance, clearing conservation, unresolved holds, and partial reachability.
 - Added CLI command `uv run python -m ledgerguard.cli check-history <history-file>` supporting text and JSON output.
 - Added Hypothesis stateful tests and divergence detection tests (`tests/test_reference_checker.py`).
+
+### Stage 2
+- Implemented deterministic chaos campaign engine (`src/ledgerguard/chaos/models.py`, `src/ledgerguard/chaos/engine.py`) supporting all 18 fault modes, seeded workload/fault scheduling, concurrent workers, forward recovery, stopped-and-drained reconciliation, and `I1`–`I16` invariant matrix reporting.
+- Added CLI runner `scripts/run_chaos_campaign.py` and bounded CI chaos campaign step in `.github/workflows/ci.yml`.
+- Added production-gated operator API endpoints (`/v1/operator/chaos/run`, `/v1/operator/chaos/campaigns`) and Operator Console Chaos Campaigns view (`apps/console/app/console/chaos/page.tsx`) under grouped navigation (`Observe` / `Operate` / `Verify`).
+- Added chaos campaign tests (`tests/test_chaos_campaign.py`) and documentation (`docs/chaos_testing.md`).
 
 ## Baseline Verification Evidence
 
