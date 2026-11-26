@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEMO_API_TOKENS = frozenset({"ledgerguard_operator_demo_token"})
 _DEMO_INTERNAL_SECRETS = frozenset({"ledgerguard_internal_secret_token_change_in_prod"})
+_DEMO_DB_PASSWORDS = ("ledgerguard_app_secret", "ledgerguard_admin_secret")
 
 
 class Settings(BaseSettings):
@@ -88,6 +89,11 @@ class Settings(BaseSettings):
     # may share a name (zero-downtime rotation: add the new token, deploy callers, drop the old).
     service_tokens_raw: str | None = Field(default=None, alias="API_SERVICE_TOKENS")
 
+    # API rate limiting (per client, in-process token bucket; 0 disables). Bursts up to one
+    # minute's worth are allowed. Multi-process deployments get the limit per process.
+    rate_limit_per_minute: int = Field(default=1200, ge=0, alias="API_RATE_LIMIT_PER_MINUTE")
+    write_rate_limit_per_minute: int = Field(default=600, ge=0, alias="API_WRITE_RATE_LIMIT_PER_MINUTE")
+
     # Workers
     worker_poll_interval_ms: int = Field(default=200, alias="WORKER_POLL_INTERVAL_MS")
     worker_batch_size: int = Field(default=20, alias="WORKER_BATCH_SIZE")
@@ -115,6 +121,20 @@ class Settings(BaseSettings):
             # callers must use named service credentials.
             if self.internal_service_secret in _DEMO_INTERNAL_SECRETS:
                 raise ValueError("INTERNAL_SERVICE_SECRET must be overridden in production.")
+            if self.cookie_secure is False:
+                raise ValueError("LEDGERGUARD_COOKIE_SECURE=false is not allowed in production.")
+            if self.fault_injection_enabled:
+                raise ValueError("FAULT_INJECTION_ENABLED must be false in production.")
+            insecure = [o for o in self.get_trusted_origins() if not o.startswith("https://")]
+            if insecure:
+                raise ValueError(f"production trusted origins must use https: {insecure}")
+            urls = (
+                self.coordinator_db_url, self.coordinator_admin_db_url, self.ledger1_db_url,
+                self.ledger1_admin_db_url, self.ledger2_db_url, self.ledger2_admin_db_url,
+                self.core_db_url, self.core_admin_db_url,
+            )
+            if any(pw in url for url in urls for pw in _DEMO_DB_PASSWORDS):
+                raise ValueError("database URLs use the demo password; override them in production.")
         return self
 
     def get_service_credentials(self) -> list[tuple[str, str, str]]:

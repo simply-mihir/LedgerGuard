@@ -192,3 +192,12 @@ are distinguishable. Result (one laptop): TCC ~48 TPS, XA-2PC ~105, Saga ~323, a
 distinguishable; TCC pays for holds, a durable decision and recovery. Still one machine with
 loopback networking, minimal XA and Saga baselines, and deterministic (single-run) crash and
 rejection scenarios.
+
+## Deployment hardening (gap 6)
+
+* API-wide per-client token-bucket rate limiting (reads and writes separate, `429` +
+  `Retry-After`, `/health` exempt, bounded memory, trusted-proxy-aware client key).
+* Production startup now also refuses insecure-cookie, fault-injection, plain-http origins and
+  demo database passwords, in addition to the demo internal secret.
+* New `docs/deployment.md` covers TLS termination, secrets, backups/restore and an explicit
+  "not verified" list (no pen test, no HA, no tested DB TLS or WAL archiving).

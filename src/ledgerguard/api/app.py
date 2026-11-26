@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from ledgerguard.api.auth_routes import auth_router
+from ledgerguard.api.rate_limit import RateLimitMiddleware
 from ledgerguard.api.routes import router
 from ledgerguard.db.pool import close_all_pools
 from ledgerguard.observability import extract_trace_context, inject_trace_carrier, safe_span
@@ -37,6 +38,8 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    app.add_middleware(RateLimitMiddleware)
 
     @app.middleware("http")
     async def trace_context_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]

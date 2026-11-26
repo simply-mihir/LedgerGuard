@@ -8,7 +8,7 @@ import psycopg
 import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
-from test_console_api_consistency import AUTH, TRUSTED_ORIGIN, _headers, _login
+from test_console_api_consistency import AUTH, _headers, _login
 
 from ledgerguard.api.app import app
 from ledgerguard.config import Settings, settings
@@ -154,15 +154,45 @@ def test_client_cannot_claim_fresh_authentication() -> None:
     assert bound["mfa_verified"] is op["totp_enabled"]
 
 
-def test_production_refuses_demo_internal_secret() -> None:
+_PROD_OK = {
+    "LEDGERGUARD_ENV": "production",
+    "INTERNAL_SERVICE_SECRET": "y" * 40,
+    "LEDGERGUARD_TRUSTED_ORIGINS": "https://x.example",
+    "COORDINATOR_DB_URL": "postgresql://app:Zq8vK2pLw9@db:5432/coordinator_db",
+    "COORDINATOR_ADMIN_DB_URL": "postgresql://adm:Zq8vK2pLw9@db:5432/coordinator_db",
+    "LEDGER1_DB_URL": "postgresql://app:Zq8vK2pLw9@db:5432/ledger1_db",
+    "LEDGER1_ADMIN_DB_URL": "postgresql://adm:Zq8vK2pLw9@db:5432/ledger1_db",
+    "LEDGER2_DB_URL": "postgresql://app:Zq8vK2pLw9@db:5432/ledger2_db",
+    "LEDGER2_ADMIN_DB_URL": "postgresql://adm:Zq8vK2pLw9@db:5432/ledger2_db",
+    "CORE_DB_URL": "postgresql://app:Zq8vK2pLw9@db:5432/coordinator_db",
+    "CORE_ADMIN_DB_URL": "postgresql://adm:Zq8vK2pLw9@db:5432/coordinator_db",
+}
+
+
+def _prod(**override: str) -> Settings:
+    return Settings(**{**_PROD_OK, **override})  # type: ignore[arg-type]
+
+
+def test_production_accepts_a_fully_hardened_configuration() -> None:
+    assert _prod().env == "production"
+
+
+@pytest.mark.parametrize(
+    ("override", "why"),
+    [
+        ({"INTERNAL_SERVICE_SECRET": "ledgerguard_internal_secret_token_change_in_prod"}, "demo internal secret"),
+        ({"LEDGERGUARD_COOKIE_SECURE": "false"}, "insecure cookies"),
+        ({"FAULT_INJECTION_ENABLED": "true"}, "fault injection on"),
+        ({"LEDGERGUARD_TRUSTED_ORIGINS": "http://x.example"}, "plain-http origin"),
+        ({"LEDGERGUARD_TRUSTED_ORIGINS": "https://x.example,http://evil.example"}, "mixed origins"),
+        ({"LEDGER1_DB_URL": "postgresql://ledgerguard_app:ledgerguard_app_secret@db/l1"}, "demo app db password"),
+        ({"CORE_ADMIN_DB_URL": "postgresql://ledgerguard_admin:ledgerguard_admin_secret@db/c"}, "demo admin db password"),
+    ],
+)
+def test_production_refuses_unsafe_configuration(override: dict[str, str], why: str) -> None:
     with pytest.raises(ValidationError):
-        Settings(LEDGERGUARD_ENV="production", LEDGERGUARD_TRUSTED_ORIGINS="https://x.example")  # type: ignore[call-arg]
-    ok = Settings(  # type: ignore[call-arg]
-        LEDGERGUARD_ENV="production", INTERNAL_SERVICE_SECRET="y" * 40,
-        LEDGERGUARD_TRUSTED_ORIGINS="https://x.example",
-    )
-    assert ok.env == "production"
-    assert TRUSTED_ORIGIN
+        _prod(**override)
+    assert why  # parametrisation ids document each refusal
 
 
 @pytest.mark.parametrize(
