@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from psycopg.rows import dict_row
 
 from ledgerguard.api.auth import require_idempotency_key, verify_bearer_token
@@ -30,6 +30,8 @@ from ledgerguard.api.schemas import (
     TransferResponse,
     WorkflowTimelineEntryResponse,
 )
+from ledgerguard.auth.dependencies import require_operator
+from ledgerguard.auth.models import OperatorPublicInfo
 from ledgerguard.config import settings
 from ledgerguard.coordinator.directory_service import provision_account, register_customer
 from ledgerguard.coordinator.failpoints import CrashAfterCommitError, FailpointManager
@@ -82,6 +84,29 @@ def get_ledger_db_url() -> str:
 def get_coord_db_url() -> str:
     """Return the coordinator database URL."""
     return settings.coordinator_db_url
+
+
+def resolve_account_ledger_url(account_id: UUID) -> str:
+    """Return the participant ledger URL that owns an account.
+
+    The coordinator directory is authoritative for routing. Accounts created
+    directly on the default ledger (no directory row) fall back to that ledger.
+    """
+    with get_db_connection(settings.coordinator_db_url) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT ledger_id FROM account_directory WHERE account_id = %s;",
+                (account_id,),
+            )
+            row = cur.fetchone()
+    if row is not None and row["ledger_id"] == "ledger-2":
+        return settings.ledger2_db_url
+    if row is not None and row["ledger_id"] != "ledger-1":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Account {account_id} is routed to unknown ledger '{row['ledger_id']}'.",
+        )
+    return get_ledger_db_url()
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +174,7 @@ def create_account(
 def get_balance(account_id: UUID) -> AccountResponse:
     """Return authoritative posted, held, and available balances for an account."""
     try:
-        acct = get_account_balance(get_ledger_db_url(), account_id)
+        acct = get_account_balance(resolve_account_ledger_url(account_id), account_id)
         return AccountResponse(
             account_id=acct.account_id,
             currency=acct.currency,
@@ -173,7 +198,7 @@ def get_account_statement(
     """Retrieve chronological statement entries using account-sequence cursor pagination."""
     try:
         entries, next_cursor = get_statement(
-            get_ledger_db_url(), account_id, cursor_sequence=cursor, limit=limit
+            resolve_account_ledger_url(account_id), account_id, cursor_sequence=cursor, limit=limit
         )
         return StatementResponse(
             account_id=account_id,
@@ -1048,6 +1073,25 @@ def transition_operator_dispute(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+def _session_bound(
+    request: Request, operator: OperatorPublicInfo, body: dict[str, Any], id_key: str, role_key: str
+) -> dict[str, Any]:
+    """Bind approval actor identity to the authenticated operator session.
+
+    Browser sessions cannot assert another operator's id, role or MFA state:
+    those values are taken from the server-side session and any client-supplied
+    values are discarded. Internal bearer-token service callers keep supplying
+    explicit actors.
+    """
+    if getattr(request.state, "auth_type", None) != "cookie":
+        return body
+    bound = dict(body)
+    bound[id_key] = operator.username
+    bound[role_key] = operator.role
+    bound["mfa_verified"] = operator.totp_enabled
+    return bound
+
+
 @router.get("/operator/approvals")
 def list_operator_approvals(
     limit: int = Query(default=50, ge=1, le=200),
@@ -1062,9 +1106,11 @@ def list_operator_approvals(
 @router.post("/operator/approvals")
 def create_operator_approval(
     body: dict[str, Any],
-    _: None = Depends(verify_bearer_token),
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_operator),
 ) -> dict[str, Any]:
     """Submit a new sensitive action for four-eyes approval."""
+    body = _session_bound(request, operator, body, "initiator_id", "initiator_role")
     from ledgerguard.approval import (
         ApprovalAuthorizationError,
         SensitiveAction,
@@ -1090,9 +1136,11 @@ def create_operator_approval(
 def approve_operator_request(
     request_id: UUID,
     body: dict[str, Any],
-    _: None = Depends(verify_bearer_token),
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_operator),
 ) -> dict[str, Any]:
     """Approve a pending dual-control request."""
+    body = _session_bound(request, operator, body, "approver_id", "approver_role")
     from ledgerguard.approval import (
         ApprovalAuthorizationError,
         ApprovalStateError,
@@ -1118,9 +1166,11 @@ def approve_operator_request(
 def reject_operator_request(
     request_id: UUID,
     body: dict[str, Any],
-    _: None = Depends(verify_bearer_token),
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_operator),
 ) -> dict[str, Any]:
     """Reject a pending dual-control request."""
+    body = _session_bound(request, operator, body, "actor_id", "actor_role")
     from ledgerguard.approval import (
         ApprovalAuthorizationError,
         ApprovalStateError,
@@ -1145,9 +1195,11 @@ def reject_operator_request(
 def execute_operator_approval(
     request_id: UUID,
     body: dict[str, Any],
-    _: None = Depends(verify_bearer_token),
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_operator),
 ) -> dict[str, Any]:
     """Idempotently execute an approved dual-control request."""
+    body = _session_bound(request, operator, body, "executor_id", "executor_role")
     from ledgerguard.approval import (
         ApprovalAuthorizationError,
         ApprovalStateError,

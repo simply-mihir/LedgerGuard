@@ -7,6 +7,7 @@ from fastapi import Header, HTTPException, Request, status
 from ledgerguard.auth.dependencies import (
     COOKIE_SESSION_NAME,
 )
+from ledgerguard.auth.origins import is_origin_allowed
 from ledgerguard.auth.service import validate_session
 from ledgerguard.config import settings
 
@@ -25,19 +26,11 @@ def verify_bearer_token(
             # Enforce Origin check and CSRF token on mutating actions when using cookie authentication
             if request.method in ("POST", "PUT", "PATCH", "DELETE"):
                 origin = request.headers.get("origin")
-                if origin:
-                    request_host = request.headers.get("host", "").split(":")[0]
-                    trusted_hosts = {"localhost", "127.0.0.1", "testserver"}
-                    if request_host:
-                        trusted_hosts.add(request_host)
-                    from urllib.parse import urlparse
-                    parsed = urlparse(origin)
-                    origin_host = parsed.hostname
-                    if origin_host not in trusted_hosts:
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Cross-origin state-changing request rejected.",
-                        )
+                if origin and not is_origin_allowed(origin, settings.get_trusted_origins()):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Cross-origin state-changing request rejected.",
+                    )
                 if not x_csrf_token or not expected_csrf or not secrets.compare_digest(x_csrf_token, expected_csrf):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,

@@ -257,7 +257,7 @@ def main() -> None:
     )
     operator_parser.add_argument(
         "--role",
-        choices=["OPERATOR", "ADMIN", "AUDITOR"],
+        choices=["VIEWER", "OPERATOR", "APPROVER", "AUDITOR", "ADMIN"],
         default="ADMIN",
         help="Operator role (default: ADMIN)",
     )
