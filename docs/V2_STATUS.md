@@ -92,9 +92,9 @@
 - Implemented isolated disposable-environment disaster recovery verification (`src/ledgerguard/dr/verify.py`, `scripts/demo_disaster_recovery.sh`) using `pg_dump`/`pg_restore`, forward recovery replay, cryptographic journal-chain verification, Merkle checkpoint attestation, and drained reconciliation, measuring RPO=0.0s and RTO=0.742s.
 - Added remaining Operator Console views (`/console/formal`, `/console/performance`, `/console/disaster-recovery`), `docs/threat_model.md`, `docs/disaster_recovery.md`, `docs/V2_FINAL_GUIDE.md`, `scripts/demo_v2_master.sh`, and `tests/test_disaster_recovery.py`.
 
-### Final Integrity Corrections (Fix 1 & Fix 2)
+### Final Integrity Corrections (Fix 1, Fix 2 & Benchmark Provenance)
 - Eliminated the `opposite_direction` lock-order inversion in `source_confirm()` via `migrations/ledger/009_fix_source_confirm_lock_ordering.sql` (acquiring `account_balances` `FOR UPDATE` locks in strict `account_id ASC` order across both customer and clearing accounts) paired with bounded exponential-backoff retry on `40P01`/`40001` (`src/ledgerguard/db/retry.py`).
-- Reran `scripts/run_v2_perf_study.py --smoke --opposite-ops 100`: `100/100` `opposite_direction` transfers succeeded at `workers=10` (`failure_count=0`, `error_rate=0.00%`, `deadlocks=0`).
+- Upgraded benchmark provenance to `schema_version=2` (`7bb904257e0e9f02fe193a968aa64366f1a1b802`, `working_tree_clean=true`), split transient retry metrics (`deadlock_retries`, `serialization_retries`, `total_transient_retries`), and regenerated `docs/performance/*` via `uv run python scripts/run_v2_perf_study.py --seed 42 --smoke --opposite-ops 100 --warmup 2 --out-dir docs/performance`: `100/100` `opposite_direction` transfers succeeded at `workers=1` and `workers=10` (`failure_count=0`, `error_rate=0.00%`, `deadlocks=0`, `total_transient_retries=0`).
 - Normalized `raw_results.csv` to LF line endings (`lineterminator="\n"`) and added `.gitattributes`.
 
 ## Baseline Verification Evidence

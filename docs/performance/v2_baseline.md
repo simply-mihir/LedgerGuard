@@ -1,12 +1,16 @@
 # LedgerGuard V2 Concurrency & Performance Baseline
 
-- **Generated:** `2026-11-26T06:06:16.081576+00:00`
-- **Git SHA:** `aa1c102`
+- **Generated:** `2026-11-26T06:29:37.234405+00:00`
+- **Benchmark schema version:** `2`
+- **Source implementation SHA:** `7bb904257e0e9f02fe193a968aa64366f1a1b802`
+- **Source tree OID:** `ce065eb818f6a4b6482ca17156cc80943f148768`
+- **Source tree clean:** `true`
 - **Seed:** `42`
+- **Mode:** `smoke` (`workers=[1, 10]`, `warmup_ops=2`, `default_measured_ops=6`, `per_profile_ops={"opposite_direction": 100}`)
 - **Environment:** `{"os": "Darwin", "release": "25.6.0", "python": "3.12.13", "cpu_count": 12}`
-- **Reproduce Command:** `uv run python scripts/run_v2_perf_study.py --seed 42`
+- **Exact reproduction command:** `uv run python scripts/run_v2_perf_study.py --seed 42 --smoke --opposite-ops 100 --warmup 2 --out-dir docs/performance`
 
-> **Scope Note:** Measurements below reflect controlled local Docker PostgreSQL 17 triad runs and do not claim production bank-scale throughput. Deterministic resource ordering plus bounded retry prevented caller-visible failures in the documented PostgreSQL contention campaign.
+> **Scope Note:** Measurements below reflect controlled local Docker PostgreSQL 17 triad runs and do not claim production bank-scale throughput. Deterministic resource ordering plus bounded transient retry prevented caller-visible failures in the documented PostgreSQL contention campaign.
 
 ## Root-Cause Correction: Opposite-Direction Contention
 
@@ -17,29 +21,29 @@
 
 ![P95 Latency Comparison](./latency_comparison.svg)
 
-| Profile | Workers | Measured Ops | Success | Fail | Error Rate | Throughput (tps) | P50 (ms) | P95 (ms) | P99 (ms) | Max (ms) | Deadlocks | Retries |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `uniform_local` | 1 | 6 | 6 | 0 | 0.00% | 75.55 | 12.45 | 14.71 | 14.71 | 14.71 | 0 | 0 |
-| `uniform_local` | 10 | 6 | 6 | 0 | 0.00% | 100.03 | 28.07 | 58.27 | 58.27 | 58.27 | 0 | 0 |
-| `uniform_cross_ledger` | 1 | 6 | 6 | 0 | 0.00% | 14.91 | 63.14 | 82.63 | 82.63 | 82.63 | 0 | 0 |
-| `uniform_cross_ledger` | 10 | 6 | 6 | 0 | 0.00% | 35.56 | 149.18 | 166.5 | 166.5 | 166.5 | 0 | 0 |
-| `one_hot_account` | 1 | 6 | 6 | 0 | 0.00% | 19.29 | 49.5 | 57.77 | 57.77 | 57.77 | 0 | 0 |
-| `one_hot_account` | 10 | 6 | 6 | 0 | 0.00% | 43.79 | 107.83 | 134.64 | 134.64 | 134.64 | 0 | 0 |
-| `ten_hot_accounts` | 1 | 6 | 6 | 0 | 0.00% | 15.82 | 60.97 | 68.79 | 68.79 | 68.79 | 0 | 0 |
-| `ten_hot_accounts` | 10 | 6 | 6 | 0 | 0.00% | 37.02 | 124.63 | 159.15 | 159.15 | 159.15 | 0 | 0 |
-| `opposite_direction` | 1 | 100 | 100 | 0 | 0.00% | 17.56 | 57.34 | 65.88 | 76.21 | 90.0 | 0 | 0 |
-| `opposite_direction` | 10 | 100 | 100 | 0 | 0.00% | 76.81 | 123.48 | 162.39 | 170.28 | 171.73 | 0 | 0 |
-| `repeated_idempotency` | 1 | 6 | 6 | 0 | 0.00% | 294.49 | 3.0 | 4.21 | 4.21 | 4.21 | 0 | 0 |
-| `repeated_idempotency` | 10 | 6 | 6 | 0 | 0.00% | 887.81 | 4.35 | 5.26 | 5.26 | 5.26 | 0 | 0 |
-| `outbox_backlog` | 1 | 6 | 6 | 0 | 0.00% | 14.75 | 66.75 | 72.44 | 72.44 | 72.44 | 0 | 0 |
-| `outbox_backlog` | 10 | 6 | 6 | 0 | 0.00% | 62.63 | 84.32 | 95.12 | 95.12 | 95.12 | 0 | 0 |
-| `recovery_under_load` | 1 | 6 | 6 | 0 | 0.00% | 17.15 | 56.21 | 69.12 | 69.12 | 69.12 | 0 | 0 |
-| `recovery_under_load` | 10 | 6 | 6 | 0 | 0.00% | 53.27 | 102.96 | 110.89 | 110.89 | 110.89 | 0 | 0 |
-| `reconciliation_under_load` | 1 | 6 | 6 | 0 | 0.00% | 0.56 | 1616.32 | 2631.96 | 2631.96 | 2631.96 | 0 | 0 |
-| `reconciliation_under_load` | 10 | 6 | 6 | 0 | 0.00% | 2.21 | 2703.13 | 2711.42 | 2711.42 | 2711.42 | 0 | 0 |
-| `snapshot_reconstruction` | 1 | 6 | 6 | 0 | 0.00% | 91.79 | 10.02 | 14.81 | 14.81 | 14.81 | 0 | 0 |
-| `snapshot_reconstruction` | 10 | 6 | 6 | 0 | 0.00% | 228.86 | 18.81 | 25.38 | 25.38 | 25.38 | 0 | 0 |
-| `journal_hash_verification` | 1 | 6 | 6 | 0 | 0.00% | 61.3 | 15.53 | 19.04 | 19.04 | 19.04 | 0 | 0 |
-| `journal_hash_verification` | 10 | 6 | 6 | 0 | 0.00% | 82.17 | 48.5 | 71.64 | 71.64 | 71.64 | 0 | 0 |
-| `approval_workflow` | 1 | 6 | 6 | 0 | 0.00% | 199.29 | 5.0 | 5.04 | 5.04 | 5.04 | 0 | 0 |
-| `approval_workflow` | 10 | 6 | 6 | 0 | 0.00% | 913.85 | 5.41 | 5.94 | 5.94 | 5.94 | 0 | 0 |
+| Profile | Workers | Measured Ops | Success | Fail | Error Rate | Throughput (tps) | P50 (ms) | P95 (ms) | P99 (ms) | Max (ms) | Deadlocks | Deadlock Retries | Ser. Retries | Total Retries |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `uniform_local` | 1 | 6 | 6 | 0 | 0.00% | 127.09 | 7.34 | 8.53 | 8.53 | 8.53 | 0 | 0 | 0 | 0 |
+| `uniform_local` | 10 | 6 | 6 | 0 | 0.00% | 140.52 | 16.56 | 40.85 | 40.85 | 40.85 | 0 | 0 | 0 | 0 |
+| `uniform_cross_ledger` | 1 | 6 | 6 | 0 | 0.00% | 18.94 | 50.73 | 61.2 | 61.2 | 61.2 | 0 | 0 | 0 | 0 |
+| `uniform_cross_ledger` | 10 | 6 | 6 | 0 | 0.00% | 42.56 | 116.7 | 140.54 | 140.54 | 140.54 | 0 | 0 | 0 | 0 |
+| `one_hot_account` | 1 | 6 | 6 | 0 | 0.00% | 18.91 | 50.44 | 59.78 | 59.78 | 59.78 | 0 | 0 | 0 | 0 |
+| `one_hot_account` | 10 | 6 | 6 | 0 | 0.00% | 41.69 | 116.84 | 143.55 | 143.55 | 143.55 | 0 | 0 | 0 | 0 |
+| `ten_hot_accounts` | 1 | 6 | 6 | 0 | 0.00% | 18.49 | 51.48 | 62.89 | 62.89 | 62.89 | 0 | 0 | 0 | 0 |
+| `ten_hot_accounts` | 10 | 6 | 6 | 0 | 0.00% | 54.72 | 82.09 | 109.3 | 109.3 | 109.3 | 0 | 0 | 0 | 0 |
+| `opposite_direction` | 1 | 100 | 100 | 0 | 0.00% | 16.46 | 52.45 | 101.74 | 154.12 | 223.18 | 0 | 0 | 0 | 0 |
+| `opposite_direction` | 10 | 100 | 100 | 0 | 0.00% | 83.26 | 115.15 | 145.04 | 153.84 | 161.02 | 0 | 0 | 0 | 0 |
+| `repeated_idempotency` | 1 | 6 | 6 | 0 | 0.00% | 418.91 | 2.19 | 2.99 | 2.99 | 2.99 | 0 | 0 | 0 | 0 |
+| `repeated_idempotency` | 10 | 6 | 6 | 0 | 0.00% | 1102.89 | 3.77 | 3.99 | 3.99 | 3.99 | 0 | 0 | 0 | 0 |
+| `outbox_backlog` | 1 | 6 | 6 | 0 | 0.00% | 17.74 | 55.44 | 59.0 | 59.0 | 59.0 | 0 | 0 | 0 | 0 |
+| `outbox_backlog` | 10 | 6 | 6 | 0 | 0.00% | 60.49 | 86.49 | 97.77 | 97.77 | 97.77 | 0 | 0 | 0 | 0 |
+| `recovery_under_load` | 1 | 6 | 6 | 0 | 0.00% | 17.13 | 54.67 | 66.93 | 66.93 | 66.93 | 0 | 0 | 0 | 0 |
+| `recovery_under_load` | 10 | 6 | 6 | 0 | 0.00% | 60.12 | 91.34 | 99.03 | 99.03 | 99.03 | 0 | 0 | 0 | 0 |
+| `reconciliation_under_load` | 1 | 6 | 6 | 0 | 0.00% | 0.75 | 1260.9 | 1714.17 | 1714.17 | 1714.17 | 0 | 0 | 0 | 0 |
+| `reconciliation_under_load` | 10 | 6 | 6 | 0 | 0.00% | 2.59 | 2305.92 | 2317.21 | 2317.21 | 2317.21 | 0 | 0 | 0 | 0 |
+| `snapshot_reconstruction` | 1 | 6 | 6 | 0 | 0.00% | 115.87 | 8.46 | 9.96 | 9.96 | 9.96 | 0 | 0 | 0 | 0 |
+| `snapshot_reconstruction` | 10 | 6 | 6 | 0 | 0.00% | 324.71 | 14.68 | 17.56 | 17.56 | 17.56 | 0 | 0 | 0 | 0 |
+| `journal_hash_verification` | 1 | 6 | 6 | 0 | 0.00% | 66.41 | 13.69 | 21.44 | 21.44 | 21.44 | 0 | 0 | 0 | 0 |
+| `journal_hash_verification` | 10 | 6 | 6 | 0 | 0.00% | 102.49 | 44.22 | 57.66 | 57.66 | 57.66 | 0 | 0 | 0 | 0 |
+| `approval_workflow` | 1 | 6 | 6 | 0 | 0.00% | 133.92 | 6.57 | 8.96 | 8.96 | 8.96 | 0 | 0 | 0 | 0 |
+| `approval_workflow` | 10 | 6 | 6 | 0 | 0.00% | 691.6 | 6.88 | 7.59 | 7.59 | 7.59 | 0 | 0 | 0 | 0 |
