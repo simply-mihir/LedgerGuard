@@ -201,3 +201,15 @@ rejection scenarios.
   demo database passwords, in addition to the demo internal secret.
 * New `docs/deployment.md` covers TLS termination, secrets, backups/restore and an explicit
   "not verified" list (no pen test, no HA, no tested DB TLS or WAL archiving).
+
+## CI flakiness (gap 7)
+
+Measured, not assumed: `scripts/run_flake_probe.sh` repeats the ten timing-sensitive test
+files three times quietly and three times with one CPU burner per core (machine load ~16 on 12
+cores). All six runs passed; no flake could be reproduced locally. Reviewing the timing
+assertions found one load-sensitive upper bound (a healed proxy roundtrip must be under 150 ms);
+it now takes the fastest of five samples, which still fails if latency is still injected
+(every sample would be >= 0.28 s). Remaining probabilistic test: the SIGKILL-after-COMMIT
+scenario requires 2 of 3 kills to land inside the crash window (latency is injected to widen
+it); it passed all six runs but a very slow runner could in principle miss it. Six runs on one
+machine cannot prove CI is flake-free.

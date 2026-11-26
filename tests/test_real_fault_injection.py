@@ -89,9 +89,15 @@ def test_proxy_latency_is_applied_and_heals(echo_server) -> None:
         assert _roundtrip(proxy.port) == b"ping"
         assert time.perf_counter() - t0 >= 0.28  # both directions delayed
         proxy.heal()
-        t1 = time.perf_counter()
-        _roundtrip(proxy.port)
-        assert time.perf_counter() - t1 < 0.15
+        # The injected 2 x 150 ms must be gone. A busy CI runner can delay any single roundtrip,
+        # so take the fastest of several: if latency were still injected, every sample would be
+        # >= 0.28 s, whereas an unloaded loopback roundtrip takes a few milliseconds.
+        samples = []
+        for _ in range(5):
+            t1 = time.perf_counter()
+            _roundtrip(proxy.port)
+            samples.append(time.perf_counter() - t1)
+        assert min(samples) < 0.15, samples
 
 
 def test_proxy_blackhole_delivers_nothing_then_heals(echo_server) -> None:
