@@ -1,6 +1,11 @@
 {
-  "transfers_checked": 1047,
-  "accepted": 1047,
+  "source": {
+    "git_sha": "c30823169c5b23dc6ec3c1dfdcee6eff855e8d21",
+    "git_tree": "0c4d0652b9ff57c46b93549b884a46fbe930190a",
+    "working_tree_clean": true
+  },
+  "transfers_checked": 1831,
+  "accepted": 1831,
   "rejected": [],
   "unique_shapes": [
     {
@@ -13,7 +18,7 @@
         "DESTINATION_CONFIRMED",
         "TRANSFER_SETTLED"
       ],
-      "count": 1021
+      "count": 1784
     },
     {
       "final_state": "CANCELLED",
@@ -22,7 +27,7 @@
         "DECISION_MADE:CANCEL",
         "DESTINATION_PREPARE_REJECTED"
       ],
-      "count": 16
+      "count": 30
     },
     {
       "final_state": "CANCELLED",
@@ -31,12 +36,23 @@
         "DECISION_MADE:CANCEL",
         "SOURCE_PREPARE_REJECTED"
       ],
-      "count": 10
+      "count": 16
+    },
+    {
+      "final_state": "SETTLED",
+      "events": [
+        "PHASE_PREPARE_STARTED",
+        "DECISION_MADE:COMMIT",
+        "SOURCE_CONFIRMED",
+        "DESTINATION_CONFIRMED",
+        "TRANSFER_SETTLED"
+      ],
+      "count": 1
     }
   ],
-  "single_edit_mutants": 186,
-  "mutants_accepted_benign_marker_or_prefix": 46,
+  "single_edit_mutants": 260,
+  "mutants_accepted_benign_marker_or_prefix": 59,
   "mutants_accepted_unexpected": 0,
-  "tlc_cross_checked": 43,
-  "tlc_agreement": 43
+  "tlc_cross_checked": 44,
+  "tlc_agreement": 44
 }
