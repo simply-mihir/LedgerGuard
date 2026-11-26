@@ -145,3 +145,10 @@
 - The default Docker stack no longer enables prepared transactions; the XA baseline uses the opt-in `docker-compose.xa.yml` override (used by CI).
 
 - Authentication now has a single code path (`ledgerguard.auth.dependencies.get_current_operator`); `verify_bearer_token` is a thin alias over `require_authenticated`. Status contract: 401 missing/malformed credentials, 403 wrong bearer token, CSRF/origin failures or read-only role.
+
+## Post-V2 Hardening: Named Service Credentials
+
+- Replaced reliance on one shared, full-ADMIN bearer token with named per-caller credentials (`API_SERVICE_TOKENS=name:ROLE:token,...`): each caller has an attributable identity (`svc:<name>`), a configured role (read-only roles cannot mutate), and a >=32-char token; repeating a name allows zero-downtime rotation, and removing an entry revokes it.
+- Service identities are bound server-side for audit actors and approvals; a service credential has no MFA and so can never approve. Malformed credential configuration fails at startup.
+- The shared demo token (`API_BEARER_TOKEN`) is accepted only outside production.
+- Tests: `tests/test_api_authorization.py`.

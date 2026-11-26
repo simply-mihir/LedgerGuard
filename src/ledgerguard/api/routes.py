@@ -88,7 +88,7 @@ logger = logging.getLogger(__name__)
 
 def _actor(request: Request, supplied: str) -> str:
     """Audit identity: the authenticated session's username; client text only for service callers."""
-    if getattr(request.state, "auth_type", None) == "cookie":
+    if getattr(request.state, "auth_type", None) in ("cookie", "service"):
         return str(request.state.operator.username)
     return supplied
 
@@ -1142,11 +1142,13 @@ def _session_bound(
 
     Browser sessions cannot assert another operator's id, role or MFA state:
     those values are taken from the server-side session and any client-supplied
-    values are discarded. Internal bearer-token service callers keep supplying
+    values are discarded. Named service credentials are bound the same way (identity
+    ``svc:<name>``, no MFA). Only the legacy shared demo token, disabled in production, may supply
     explicit actors.
     """
     data: dict[str, Any] = dict(body.model_dump(exclude_unset=True))
-    if getattr(request.state, "auth_type", None) != "cookie":
+    auth_type = getattr(request.state, "auth_type", None)
+    if auth_type not in ("cookie", "service"):
         if not data.get(id_key):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{id_key}' is required."
@@ -1157,9 +1159,16 @@ def _session_bound(
     bound[role_key] = operator.role
     bound["mfa_verified"] = operator.totp_enabled
     # Step-up freshness is measured from the server-side session, never trusted from the client.
-    from ledgerguard.auth.service import session_auth_age_seconds
+    # Service credentials have no interactive login, so they can never satisfy the recent-auth
+    # (or MFA) requirement for approvals.
+    if auth_type == "cookie":
+        from ledgerguard.auth.service import session_auth_age_seconds
 
-    bound["auth_age_seconds"] = session_auth_age_seconds(request.cookies.get(COOKIE_SESSION_NAME, ""))
+        bound["auth_age_seconds"] = session_auth_age_seconds(
+            request.cookies.get(COOKIE_SESSION_NAME, "")
+        )
+    else:
+        bound["auth_age_seconds"] = 10**9
     return bound
 
 

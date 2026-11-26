@@ -1,5 +1,6 @@
 """Application configuration management for LedgerGuard."""
 
+import re
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -83,6 +84,9 @@ class Settings(BaseSettings):
         default="ledgerguard_operator_demo_token",
         alias="API_BEARER_TOKEN",
     )
+    # Named per-caller service credentials: "name:ROLE:token,name2:ROLE:token". Several entries
+    # may share a name (zero-downtime rotation: add the new token, deploy callers, drop the old).
+    service_tokens_raw: str | None = Field(default=None, alias="API_SERVICE_TOKENS")
 
     # Workers
     worker_poll_interval_ms: int = Field(default=200, alias="WORKER_POLL_INTERVAL_MS")
@@ -103,16 +107,42 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def _reject_demo_secrets_in_production(self) -> "Settings":
-        """Fail closed: the documented demo secrets must never authenticate a production API."""
+    def _validate_secrets(self) -> "Settings":
+        """Fail closed on weak or demo secrets; validate service credentials at startup."""
+        _ = self.get_service_credentials()  # raises ValueError on malformed configuration
         if self.env == "production":
-            if self.api_bearer_token in _DEMO_API_TOKENS or len(self.api_bearer_token) < 32:
-                raise ValueError(
-                    "API_BEARER_TOKEN must be set to a unique secret of >=32 characters in production."
-                )
+            # The shared legacy token is disabled in production (see get_current_operator);
+            # callers must use named service credentials.
             if self.internal_service_secret in _DEMO_INTERNAL_SECRETS:
                 raise ValueError("INTERNAL_SERVICE_SECRET must be overridden in production.")
         return self
+
+    def get_service_credentials(self) -> list[tuple[str, str, str]]:
+        """Parse API_SERVICE_TOKENS into (name, role, token) tuples; every token >=32 chars."""
+        if not self.service_tokens_raw or not self.service_tokens_raw.strip():
+            return []
+        roles = {"VIEWER", "OPERATOR", "APPROVER", "AUDITOR", "ADMIN"}
+        out: list[tuple[str, str, str]] = []
+        seen_tokens: set[str] = set()
+        names_roles: dict[str, str] = {}
+        for entry in (e.strip() for e in self.service_tokens_raw.split(",") if e.strip()):
+            parts = entry.split(":", 2)
+            if len(parts) != 3:
+                raise ValueError("API_SERVICE_TOKENS entries must look like name:ROLE:token")
+            name, role, token = (p.strip() for p in parts)
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{1,63}", name):
+                raise ValueError(f"invalid service credential name {name!r}")
+            if role not in roles:
+                raise ValueError(f"invalid role {role!r} for service credential {name!r}")
+            if len(token) < 32 or token in _DEMO_API_TOKENS:
+                raise ValueError(f"service credential {name!r} needs a unique token of >=32 chars")
+            if token in seen_tokens:
+                raise ValueError("service credential tokens must be unique")
+            if names_roles.setdefault(name, role) != role:
+                raise ValueError(f"service credential {name!r} has conflicting roles")
+            seen_tokens.add(token)
+            out.append((name, role, token))
+        return out
 
     def get_trusted_origins(self) -> list[str]:
         """Return validated list of complete trusted origins.

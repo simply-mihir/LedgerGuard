@@ -369,7 +369,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 192 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 204 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
 - **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
@@ -421,7 +421,7 @@ cd apps/console && npm run build && cd ../..
 | Test Module | Tests | Primary Verification Scope |
 | :--- | :---: | :--- |
 | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) | 14 | Integer paise bounds, balanced double-entry trigger, journal immutability triggers, role permission boundaries, zero-balance closure rules. |
-| [`tests/test_api_authorization.py`](tests/test_api_authorization.py) | 32 | Read-only role enforcement on every mutating route, durable reconciliation runs, session-bound audit actors, validated request bodies, production secret refusal. |
+| [`tests/test_api_authorization.py`](tests/test_api_authorization.py) | 44 | Read-only role enforcement on every mutating route, durable reconciliation runs, session-bound audit actors, validated request bodies, named service credentials (rotation, revocation, no MFA approvals), production disables the shared demo token. |
 | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) | 4 | Multi-database reachability probing, corrupted hold cache detection, stopped-and-drained full cluster audit. |
 | [`tests/test_auth_permissions.py`](tests/test_auth_permissions.py) | 2 | PostgreSQL role boundary enforcement: reporter role denied SELECT on auth tables; app role denied DELETE on operators and UPDATE on login attempts. |
 | [`tests/test_chaos_campaign.py`](tests/test_chaos_campaign.py) | 6 | Deterministic seeded chaos campaign engine with post-recovery invariant checks. |
@@ -449,7 +449,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
 | [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **194** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **206** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 

@@ -106,11 +106,14 @@ def test_operator_signature_experiment_execution():
 def test_operator_experiment_forbidden_in_production(monkeypatch):
     """Rule: Local fault controls are disabled in public-safe / production configuration."""
     monkeypatch.setattr(settings, "env", "production")
+    # The shared demo token is disabled in production; authenticate with a named credential.
+    token = "p" * 40
+    monkeypatch.setattr(settings, "service_tokens_raw", f"ci-prod-check:ADMIN:{token}")
 
     response = client.post(
         "/v1/operator/experiments/run",
         json={"scenario": "SIGNATURE_RECOVERY"},
-        headers=AUTH_HEADERS,
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
     assert "disabled in production" in response.json()["detail"].lower()
