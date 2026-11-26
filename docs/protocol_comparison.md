@@ -42,7 +42,7 @@ Reproduce:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.xa.yml up -d   # ledgers get max_prepared_transactions=64 (XA baseline only)
-uv run python scripts/run_protocol_comparison.py --ops 48 --workers 4
+uv run python scripts/run_protocol_comparison.py --ops 48 --workers 4 --repeats 12
 ```
 
 Tests with hard assertions on every claim below: `tests/test_protocol_comparison.py`.
@@ -54,7 +54,7 @@ Committed evidence: [`docs/comparison/results.md`](comparison/results.md) and
 
 | Property | TCC | XA-2PC | Saga |
 |---|---|---|---|
-| Happy-path throughput (4 workers) | ~40 TPS | ~75-95 TPS | ~230-280 TPS |
+| Happy-path throughput, 4 workers, mean [95% CI] over 12 runs | ~48 TPS [46.5, 50.0] | ~105 TPS [101.1, 109.4] | ~323 TPS [306.8, 339.8] |
 | Row locks pinned while coordinator is down | **none** (a hold is an ordinary row) | **yes** (prepared txns on both ledgers) | none |
 | Unrelated transfer on the same source during the outage | **succeeds (~50 ms)** | **blocked** until lock timeout (1.5 s here; unbounded without one) | succeeds |
 | Partially applied transfer visible in posted balances | **no** | no | **yes** (source already debited) |
@@ -62,6 +62,15 @@ Committed evidence: [`docs/comparison/results.md`](comparison/results.md) and
 | Funds conserved and nothing unresolved after recovery | yes | yes | yes |
 
 ### Reading the numbers honestly
+
+* **Method.** Each throughput cell is 12 independent runs of 48 transfers, protocols interleaved
+  round-robin after a discarded warm-up run; intervals are 95% Student-t intervals across runs
+  (`ledgerguard.comparison.stats`). All three protocols are statistically distinguishable on
+  TPS (non-overlapping intervals) in both workloads. The crash and rejection scenarios (S2, S3)
+  are deterministic single runs, so they carry no intervals; their timings (ms) are indicative only.
+* **`hot_source` did not hurt any protocol here.** Its intervals overlap the uncontended
+  ones, because 4 workers on one source mostly serialise on a short row lock. Do not read this
+  as "contention is free"; the workload is mild by design.
 
 * **TCC pays for its guarantees.** Each transfer performs several short local transactions
   plus coordinator writes (decision, workflow events, outbox/inbox). XA does two prepares and
@@ -73,6 +82,10 @@ Committed evidence: [`docs/comparison/results.md`](comparison/results.md) and
 * The hold-based design means a TCC bystander is bounded by *available* balance, not by locks.
 
 ## Limitations and threats to validity
+
+* n = 12 runs per cell on a laptop (i7-9750H, 12 logical CPUs, 16 GB) with other processes
+  running; intervals describe run-to-run noise on this machine only, not other hardware, and
+  independence between consecutive runs is assumed, not proven.
 
 * One machine, two Postgres containers on loopback: network latency is near zero, which
   favours protocols with fewer local round trips. Absolute numbers are not production capacity.

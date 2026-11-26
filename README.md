@@ -470,7 +470,7 @@ uv run python scripts/run_benchmarks.py
 | **Uniform Distribution** | 60 | 100.0% | **32.08 TPS** | 7.43 ms | 19.11 ms | 26.54 ms |
 | **Hot Account (80% Concentration)** | 60 | 100.0% | **38.19 TPS** | 6.91 ms | 17.76 ms | 24.67 ms |
 
-*Benchmark figures represent an existing recorded baseline of single-threaded sequential client execution from [`docs/benchmarks/baseline_report.md`](docs/benchmarks/baseline_report.md). Results vary depending on host hardware, container configuration, and concurrent workload distribution. Under multi-client concurrent execution, hot accounts will serialize on row locks, resulting in elevated wait times.*
+*These are single-run figures with no confidence interval (n = 60). For repeated, interleaved runs with 95% confidence intervals see [`docs/protocol_comparison.md`](docs/protocol_comparison.md). Benchmark figures represent an existing recorded baseline of single-threaded sequential client execution from [`docs/benchmarks/baseline_report.md`](docs/benchmarks/baseline_report.md). Results vary depending on host hardware, container configuration, and concurrent workload distribution. Under multi-client concurrent execution, hot accounts will serialize on row locks, resulting in elevated wait times.*
 
 ---
 

@@ -183,3 +183,12 @@ states) verifies the safety invariants and termination; two defective variants (
 funds check, recovery that reverses a COMMIT) are rejected with counterexamples. The check
 script and CI (`VERIFY_BROKEN=1`) run all of it. Remaining limits: small bounds, and trace
 conformance still covers coordinator events, not participant-side events.
+
+## Benchmark rigor (gap 5)
+
+The protocol comparison now runs 12 interleaved repeats per cell after a discarded warm-up
+and reports mean, standard deviation and 95% Student-t intervals, plus which protocol pairs
+are distinguishable. Result (one laptop): TCC ~48 TPS, XA-2PC ~105, Saga ~323, all pairwise
+distinguishable; TCC pays for holds, a durable decision and recovery. Still one machine with
+loopback networking, minimal XA and Saga baselines, and deterministic (single-run) crash and
+rejection scenarios.
