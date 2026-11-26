@@ -47,6 +47,32 @@ ALL_PROFILES: tuple[str, ...] = (
 )
 
 
+class DirtyWorkingTreeError(RuntimeError):
+    """Raised when benchmark evidence generation is attempted on a dirty working tree."""
+
+
+class SourceProvenance(BaseModel):
+    """Git source state recorded at benchmark execution time."""
+
+    git_sha: str
+    git_tree: str
+    working_tree_clean: bool
+
+
+class InvocationMetadata(BaseModel):
+    """Exact normalized parameters and command needed to reproduce the study."""
+
+    command: str
+    seed: int
+    mode: str
+    worker_levels: list[int]
+    warmup_ops: int
+    default_measured_ops: int
+    per_profile_ops: dict[str, int] = Field(default_factory=dict)
+    profiles: list[str]
+    output_directory: str
+
+
 class ProfileResult(BaseModel):
     """Measured metrics for a single workload profile and concurrency level."""
 
@@ -63,18 +89,21 @@ class ProfileResult(BaseModel):
     p99_ms: float
     max_ms: float
     deadlocks: int = 0
+    deadlock_retries: int = 0
     serialization_retries: int = 0
+    total_transient_retries: int = 0
     duration_seconds: float
 
 
 class StudyReport(BaseModel):
-    """Complete performance study output with environment metadata and raw results."""
+    """Complete performance study output with provenance, invocation metadata, and raw results."""
 
+    schema_version: int = 2
     generated_at: str
-    git_sha: str
+    source: SourceProvenance
+    invocation: InvocationMetadata
     seed: int
     environment: dict[str, Any] = Field(default_factory=dict)
-    command: str
     results: list[ProfileResult] = Field(default_factory=list)
 
 
@@ -85,11 +114,48 @@ def _pct(sorted_vals: list[float], p: float) -> float:
     return round(sorted_vals[idx], 2)
 
 
-def _git_sha() -> str:
+def collect_source_provenance(repo_root: Path | None = None) -> SourceProvenance:
+    """Collect full 40-char HEAD SHA, tree OID, and clean-tree status from git."""
+    cwd = str(repo_root) if repo_root is not None else None
     try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+        git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, cwd=cwd).strip()
+        git_tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True, cwd=cwd).strip()
+        porcelain = subprocess.check_output(["git", "status", "--porcelain"], text=True, cwd=cwd).strip()
+        return SourceProvenance(
+            git_sha=git_sha,
+            git_tree=git_tree,
+            working_tree_clean=(porcelain == ""),
+        )
     except Exception:
-        return "unknown"
+        return SourceProvenance(
+            git_sha="unknown",
+            git_tree="unknown",
+            working_tree_clean=False,
+        )
+
+
+def build_reproduce_command(
+    *,
+    seed: int,
+    mode: str,
+    warmup_ops: int,
+    default_measured_ops: int,
+    per_profile_ops: dict[str, int],
+    profiles: list[str],
+    output_directory: str,
+) -> str:
+    """Construct the exact normalized CLI command to reproduce a study run."""
+    parts = ["uv", "run", "python", "scripts/run_v2_perf_study.py", "--seed", str(seed)]
+    if mode == "smoke":
+        parts.append("--smoke")
+    elif default_measured_ops != 12:
+        parts.extend(["--ops", str(default_measured_ops)])
+    if "opposite_direction" in per_profile_ops:
+        parts.extend(["--opposite-ops", str(per_profile_ops["opposite_direction"])])
+    parts.extend(["--warmup", str(warmup_ops), "--out-dir", output_directory])
+    if profiles != list(ALL_PROFILES):
+        parts.extend(["--profiles", ",".join(profiles)])
+    return " ".join(parts)
 
 
 def run_perf_study(
@@ -100,10 +166,32 @@ def run_perf_study(
     warmup_ops: int = 2,
     measured_ops: int = 10,
     per_profile_ops: dict[str, int] | None = None,
+    mode: str = "full",
+    output_directory: str = "docs/performance",
+    allow_dirty: bool = False,
+    command: str | None = None,
+    repo_root: Path | None = None,
 ) -> StudyReport:
     """Execute reproducible performance benchmarks with warmup, measured period, and raw metrics."""
+    provenance = collect_source_provenance(repo_root)
+    if not provenance.working_tree_clean and not allow_dirty:
+        raise DirtyWorkingTreeError(
+            "Refusing to generate benchmark evidence from a dirty working tree. "
+            "Commit or stash all changes first, or pass --allow-dirty for local development runs."
+        )
+
     selected_profiles = profiles or list(ALL_PROFILES)
     levels = worker_levels or [1, 10]
+    normalized_per_profile = dict(per_profile_ops or {})
+    reproduce_cmd = command or build_reproduce_command(
+        seed=seed,
+        mode=mode,
+        warmup_ops=warmup_ops,
+        default_measured_ops=measured_ops,
+        per_profile_ops=normalized_per_profile,
+        profiles=selected_profiles,
+        output_directory=output_directory,
+    )
     rng = random.Random(seed)
     coord_url = settings.coordinator_db_url
     l1_url = settings.ledger1_db_url
@@ -212,10 +300,10 @@ def run_perf_study(
                         if "serialization" in err:
                             ser_retries += 1
             retries_after = get_transient_retry_stats()
-            internal_retries = (
-                (retries_after.get("40P01", 0) - retries_before.get("40P01", 0))
-                + (retries_after.get("40001", 0) - retries_before.get("40001", 0))
-            )
+            deadlock_retries = max(0, retries_after.get("40P01", 0) - retries_before.get("40P01", 0))
+            internal_ser_retries = max(0, retries_after.get("40001", 0) - retries_before.get("40001", 0))
+            total_ser_retries = ser_retries + internal_ser_retries
+            total_transient_retries = deadlock_retries + total_ser_retries
             elapsed = max(0.001, time.perf_counter() - t_start)
             sorted_lat = sorted(latencies)
             results.append(
@@ -233,15 +321,29 @@ def run_perf_study(
                     p99_ms=_pct(sorted_lat, 99),
                     max_ms=round(max(sorted_lat, default=0.0), 2),
                     deadlocks=deadlocks,
-                    serialization_retries=ser_retries + internal_retries,
+                    deadlock_retries=deadlock_retries,
+                    serialization_retries=total_ser_retries,
+                    total_transient_retries=total_transient_retries,
                     duration_seconds=round(elapsed, 3),
                 )
             )
             _ = rng.random()
 
     return StudyReport(
+        schema_version=2,
         generated_at=datetime.now(UTC).isoformat(),
-        git_sha=_git_sha(),
+        source=provenance,
+        invocation=InvocationMetadata(
+            command=reproduce_cmd,
+            seed=seed,
+            mode=mode,
+            worker_levels=list(levels),
+            warmup_ops=warmup_ops,
+            default_measured_ops=measured_ops,
+            per_profile_ops=normalized_per_profile,
+            profiles=list(selected_profiles),
+            output_directory=output_directory,
+        ),
         seed=seed,
         environment={
             "os": platform.system(),
@@ -249,7 +351,6 @@ def run_perf_study(
             "python": platform.python_version(),
             "cpu_count": os.cpu_count() or 1,
         },
-        command=f"uv run python scripts/run_v2_perf_study.py --seed {seed}",
         results=results,
     )
 
@@ -305,12 +406,16 @@ def write_study_artifacts(report: StudyReport, out_dir: Path) -> dict[str, Path]
         "# LedgerGuard V2 Concurrency & Performance Baseline",
         "",
         f"- **Generated:** `{report.generated_at}`",
-        f"- **Git SHA:** `{report.git_sha}`",
+        f"- **Benchmark schema version:** `{report.schema_version}`",
+        f"- **Source implementation SHA:** `{report.source.git_sha}`",
+        f"- **Source tree OID:** `{report.source.git_tree}`",
+        f"- **Source tree clean:** `{str(report.source.working_tree_clean).lower()}`",
         f"- **Seed:** `{report.seed}`",
+        f"- **Mode:** `{report.invocation.mode}` (`workers={report.invocation.worker_levels}`, `warmup_ops={report.invocation.warmup_ops}`, `default_measured_ops={report.invocation.default_measured_ops}`, `per_profile_ops={json.dumps(report.invocation.per_profile_ops)}`)",
         f"- **Environment:** `{json.dumps(report.environment)}`",
-        f"- **Reproduce Command:** `{report.command}`",
+        f"- **Exact reproduction command:** `{report.invocation.command}`",
         "",
-        "> **Scope Note:** Measurements below reflect controlled local Docker PostgreSQL 17 triad runs and do not claim production bank-scale throughput. Deterministic resource ordering plus bounded retry prevented caller-visible failures in the documented PostgreSQL contention campaign.",
+        "> **Scope Note:** Measurements below reflect controlled local Docker PostgreSQL 17 triad runs and do not claim production bank-scale throughput. Deterministic resource ordering plus bounded transient retry prevented caller-visible failures in the documented PostgreSQL contention campaign.",
         "",
         "## Root-Cause Correction: Opposite-Direction Contention",
         "",
@@ -321,12 +426,12 @@ def write_study_artifacts(report: StudyReport, out_dir: Path) -> dict[str, Path]
         "",
         "![P95 Latency Comparison](./latency_comparison.svg)",
         "",
-        "| Profile | Workers | Measured Ops | Success | Fail | Error Rate | Throughput (tps) | P50 (ms) | P95 (ms) | P99 (ms) | Max (ms) | Deadlocks | Retries |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Profile | Workers | Measured Ops | Success | Fail | Error Rate | Throughput (tps) | P50 (ms) | P95 (ms) | P99 (ms) | Max (ms) | Deadlocks | Deadlock Retries | Ser. Retries | Total Retries |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for r in report.results:
         lines.append(
-            f"| `{r.profile}` | {r.workers} | {r.measured_ops} | {r.success_count} | {r.failure_count} | {r.error_rate:.2%} | {r.throughput_tps} | {r.p50_ms} | {r.p95_ms} | {r.p99_ms} | {r.max_ms} | {r.deadlocks} | {r.serialization_retries} |"
+            f"| `{r.profile}` | {r.workers} | {r.measured_ops} | {r.success_count} | {r.failure_count} | {r.error_rate:.2%} | {r.throughput_tps} | {r.p50_ms} | {r.p95_ms} | {r.p99_ms} | {r.max_ms} | {r.deadlocks} | {r.deadlock_retries} | {r.serialization_retries} | {r.total_transient_retries} |"
         )
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
