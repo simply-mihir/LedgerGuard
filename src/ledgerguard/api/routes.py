@@ -912,3 +912,51 @@ def get_operator_recovery_queue(
 
     ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
     return list_recovery_queue_with_explanations(settings.coordinator_db_url, ledger_urls, limit=limit)
+
+
+@router.get("/operator/history/accounts/{account_id}/balance")
+def get_operator_account_balance_as_of(
+    account_id: UUID,
+    as_of: str = Query(..., description="ISO-8601 UTC timestamp"),
+    ledger_id: str = Query(default="ledger-1", pattern="^(ledger-1|ledger-2)$"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Reconstruct account posted, held, and available balance as of timestamp T."""
+    from datetime import datetime
+
+    from ledgerguard.history import reconstruct_account_balance_as_of
+
+    url = settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
+    try:
+        dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        proof = reconstruct_account_balance_as_of(url, account_id, dt, ledger_id=ledger_id)
+        return proof.model_dump()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/history/accounts/{account_id}/snapshot")
+def create_operator_account_snapshot(
+    account_id: UUID,
+    ledger_id: str = Query(default="ledger-1", pattern="^(ledger-1|ledger-2)$"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Create an immutable checksummed balance snapshot for an account."""
+    from ledgerguard.history import create_account_snapshot
+
+    url = settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
+    return create_account_snapshot(url, account_id, ledger_id).model_dump()
+
+
+@router.get("/operator/history/clearing")
+def get_operator_clearing_as_of(
+    as_of: str = Query(..., description="ISO-8601 UTC timestamp"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Reconstruct cross-ledger clearing balance as of timestamp T."""
+    from datetime import datetime
+
+    from ledgerguard.history import reconstruct_clearing_as_of
+
+    dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+    return reconstruct_clearing_as_of(settings.ledger1_db_url, settings.ledger2_db_url, dt).model_dump()

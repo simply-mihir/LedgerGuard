@@ -5,8 +5,8 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 6 — Explainable recovery diagnostics (Complete)
-- **Next Stage:** Stage 7 — As-of-time balance reconstruction
+- **Current Stage:** Stage 7 — As-of-time balance reconstruction (Complete)
+- **Next Stage:** Stage 8 — Reversals, refunds and chargebacks
 
 ## Stage Checklist
 
@@ -17,7 +17,7 @@
 - [x] **Stage 4:** Tamper-evident audit journal
 - [x] **Stage 5:** End-to-end OpenTelemetry tracing
 - [x] **Stage 6:** Explainable recovery diagnostics
-- [ ] **Stage 7:** As-of-time balance reconstruction
+- [x] **Stage 7:** As-of-time balance reconstruction
 - [ ] **Stage 8:** Reversals, refunds and chargebacks
 - [ ] **Stage 9:** Four-eyes approval and RBAC
 - [ ] **Stage 10:** Concurrency and performance study
@@ -63,6 +63,11 @@
 ### Stage 6
 - Implemented deterministic rule-based recovery diagnostic engine (`src/ledgerguard/recovery_explain/engine.py`) covering all TCC states, partial reachability, crash-after-commit, cancellation tombstones, contradictory states, and `UNCLASSIFIED_STATE` fallback.
 - Added `/v1/operator/transfers/{transfer_id}/explain`, `/v1/operator/recovery/queue`, Operator Console `/console/recovery` view under **Operate**, `docs/recovery_explanations.md`, and `tests/test_recovery_explain.py`.
+
+### Stage 7
+- Added forward migration `migrations/ledger/008_balance_snapshots.sql` for immutable, SHA-256 checksummed `balance_snapshots`.
+- Implemented `src/ledgerguard/history/reconstruction.py` with snapshot creation, deterministic sequence-ordered replay, snapshot checksum verification + fallback, pre-creation timestamp rejection, and clearing balance reconstruction.
+- Added `/v1/operator/history/accounts/{account_id}/balance`, `/snapshot`, `/clearing`, Operator Console `/console/history`, `docs/historical_reconstruction.md`, and `tests/test_history_reconstruction.py`.
 
 ## Baseline Verification Evidence
 
