@@ -174,3 +174,12 @@ unsimulated, and the formal-model scope gap is separate.
 Follow-up found by the container-crash campaign: after a PostgreSQL crash the connection pool
 kept dead connections and the first callers failed. The pool now validates each connection at
 checkout (`check=ConnectionPool.check_connection`), costing one cheap round trip per checkout.
+
+## Formal model: concurrency and faults together (gap 4)
+
+New `formal/tla/LedgerGuardTCCMultiFaults.tla` combines concurrent transfers on shared accounts
+with message loss, worker crash/restart and durable-state recovery. TLC (654,840 distinct
+states) verifies the safety invariants and termination; two defective variants (balance-only
+funds check, recovery that reverses a COMMIT) are rejected with counterexamples. The check
+script and CI (`VERIFY_BROKEN=1`) run all of it. Remaining limits: small bounds, and trace
+conformance still covers coordinator events, not participant-side events.

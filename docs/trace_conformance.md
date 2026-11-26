@@ -24,6 +24,10 @@ whether the TLA+ specification (`formal/tla/LedgerGuardTCC.tla`) could have prod
    (2,232 distinct states, no symmetry reduction). Setting `IgnoreHolds = TRUE` (a Try phase that
    checks only posted balance) yields a TLC counterexample: three concurrent holds on a balance of
    10.
+   `LedgerGuardTCCMultiFaults.tla` extends this with per-transfer re-deliverable messages, bounded
+   message loss (2), a worker crash/restart (1) and a durable-state recovery action (654,840
+   distinct states); a variant whose recovery flips a COMMIT to CANCEL is rejected by TLC.
+   Trace conformance still covers coordinator events only, not participant-side events.
 
 ## Event-to-spec mapping
 

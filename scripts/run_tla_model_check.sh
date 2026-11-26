@@ -34,6 +34,13 @@ java -XX:+UseParallelGC -cp "$JAR_PATH" tlc2.TLC \
   -config "${TLA_DIR}/LedgerGuardTCCMulti.cfg" \
   "${TLA_DIR}/LedgerGuardTCCMulti.tla"
 
+echo "=== Running TLC Model Checker on LedgerGuardTCCMultiFaults.tla (3 transfers + message loss + worker crashes) ==="
+java -XX:+UseParallelGC -cp "$JAR_PATH" tlc2.TLC \
+  -workers auto \
+  -metadir "$OUT_DIR" \
+  -config "${TLA_DIR}/LedgerGuardTCCMultiFaults.cfg" \
+  "${TLA_DIR}/LedgerGuardTCCMultiFaults.tla"
+
 if [ "${VERIFY_BROKEN:-0}" = "1" ]; then
   echo "=== Verifying intentionally broken model detects violation ==="
   set +e
@@ -64,4 +71,22 @@ if [ "${VERIFY_BROKEN:-0}" = "1" ]; then
     exit 1
   fi
   echo "Multi-transfer defective model correctly produced a NoOverspend counterexample (exit $STATUS)."
+
+  for variant in "_broken:NoOverspend" "_recovery_broken:CommitCancelExclusive"; do
+    cfg="${variant%%:*}"; inv="${variant##*:}"
+    echo "=== Verifying faulty-model variant ${cfg} is rejected (expect ${inv}) ==="
+    set +e
+    java -XX:+UseParallelGC -cp "$JAR_PATH" tlc2.TLC \
+      -workers auto \
+      -metadir "$OUT_DIR" \
+      -config "${TLA_DIR}/LedgerGuardTCCMultiFaults${cfg}.cfg" \
+      "${TLA_DIR}/LedgerGuardTCCMultiFaults.tla" | tee "$OUT_DIR/faults${cfg}.log"
+    STATUS=${PIPESTATUS[0]}
+    set -e
+    if [ "$STATUS" -eq 0 ] || ! grep -q "Invariant ${inv} is violated" "$OUT_DIR/faults${cfg}.log"; then
+      echo "ERROR: faulty variant ${cfg} did not produce the expected ${inv} counterexample!"
+      exit 1
+    fi
+    echo "Variant ${cfg} correctly produced a ${inv} counterexample."
+  done
 fi
