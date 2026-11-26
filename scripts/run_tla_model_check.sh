@@ -27,6 +27,13 @@ java -XX:+UseParallelGC -cp "$JAR_PATH" tlc2.TLC \
   -config "${TLA_DIR}/LedgerGuardTCC.cfg" \
   "${TLA_DIR}/LedgerGuardTCC.tla"
 
+echo "=== Running TLC Model Checker on LedgerGuardTCCMulti.tla (3 concurrent transfers, shared accounts) ==="
+java -XX:+UseParallelGC -cp "$JAR_PATH" tlc2.TLC \
+  -workers auto \
+  -metadir "$OUT_DIR" \
+  -config "${TLA_DIR}/LedgerGuardTCCMulti.cfg" \
+  "${TLA_DIR}/LedgerGuardTCCMulti.tla"
+
 if [ "${VERIFY_BROKEN:-0}" = "1" ]; then
   echo "=== Verifying intentionally broken model detects violation ==="
   set +e
@@ -42,4 +49,19 @@ if [ "${VERIFY_BROKEN:-0}" = "1" ]; then
     exit 1
   fi
   echo "Broken model correctly detected invariant violation (exit $STATUS)."
+
+  echo "=== Verifying multi-transfer model with defective funds check is rejected ==="
+  set +e
+  java -XX:+UseParallelGC -cp "$JAR_PATH" tlc2.TLC \
+    -workers auto \
+    -metadir "$OUT_DIR" \
+    -config "${TLA_DIR}/LedgerGuardTCCMulti_broken.cfg" \
+    "${TLA_DIR}/LedgerGuardTCCMulti.tla" | tee "$OUT_DIR/multi_broken.log"
+  STATUS=${PIPESTATUS[0]}
+  set -e
+  if [ "$STATUS" -eq 0 ] || ! grep -q "Invariant NoOverspend is violated" "$OUT_DIR/multi_broken.log"; then
+    echo "ERROR: defective multi-transfer model did not produce the expected NoOverspend counterexample!"
+    exit 1
+  fi
+  echo "Multi-transfer defective model correctly produced a NoOverspend counterexample (exit $STATUS)."
 fi

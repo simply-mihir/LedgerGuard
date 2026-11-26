@@ -118,3 +118,8 @@
 
 - Added `src/ledgerguard/comparison/` (TCC vs XA two-phase commit vs Saga on the same accounting kernel and real PostgreSQL 17), `scripts/run_protocol_comparison.py`, `tests/test_protocol_comparison.py`, `docs/protocol_comparison.md`, and committed evidence in `docs/comparison/`.
 - `docker-compose.yml` now starts the ledger databases with `max_prepared_transactions=64` (required by the XA baseline only; LedgerGuard itself never uses prepared transactions).
+
+## Post-V2 Evaluation: Trace Conformance and Concurrent Formal Model
+
+- Added `src/ledgerguard/conformance/` (Python acceptor for the TLA+ transition relation, trace extraction from `workflow_events`, TLC-backed trace validation, mutation corpus), `scripts/check_trace_conformance.py`, `tests/test_trace_conformance.py`, `docs/trace_conformance.md`, and `docs/conformance/results.json`.
+- Added `formal/tla/LedgerGuardTCCMulti.tla` (+ correct and defective configs) modelling three concurrent transfers over shared accounts, wired into `scripts/run_tla_model_check.sh` and covered by `tests/test_tla_multi_transfer.py`.

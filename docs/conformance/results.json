@@ -1,0 +1,42 @@
+{
+  "transfers_checked": 1047,
+  "accepted": 1047,
+  "rejected": [],
+  "unique_shapes": [
+    {
+      "final_state": "SETTLED",
+      "events": [
+        "PHASE_PREPARE_STARTED",
+        "DECISION_MADE:COMMIT",
+        "DECISION_COMMITTED",
+        "SOURCE_CONFIRMED",
+        "DESTINATION_CONFIRMED",
+        "TRANSFER_SETTLED"
+      ],
+      "count": 1021
+    },
+    {
+      "final_state": "CANCELLED",
+      "events": [
+        "PHASE_PREPARE_STARTED",
+        "DECISION_MADE:CANCEL",
+        "DESTINATION_PREPARE_REJECTED"
+      ],
+      "count": 16
+    },
+    {
+      "final_state": "CANCELLED",
+      "events": [
+        "PHASE_PREPARE_STARTED",
+        "DECISION_MADE:CANCEL",
+        "SOURCE_PREPARE_REJECTED"
+      ],
+      "count": 10
+    }
+  ],
+  "single_edit_mutants": 186,
+  "mutants_accepted_benign_marker_or_prefix": 46,
+  "mutants_accepted_unexpected": 0,
+  "tlc_cross_checked": 43,
+  "tlc_agreement": 43
+}
