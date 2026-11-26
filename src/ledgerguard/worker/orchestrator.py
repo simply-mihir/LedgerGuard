@@ -43,8 +43,8 @@ def record_workflow_event(
 
     enriched = dict(details or {})
     carrier = inject_trace_carrier()
-    if carrier:
-        enriched["_trace"] = carrier
+    if carrier and "traceparent" in carrier:
+        enriched["_traceparent"] = carrier["traceparent"]
 
     with conn.cursor() as cur:
         cur.execute(
@@ -68,8 +68,8 @@ def record_workflow_event_once(
 
     enriched = dict(details or {})
     carrier = inject_trace_carrier()
-    if carrier:
-        enriched["_trace"] = carrier
+    if carrier and "traceparent" in carrier:
+        enriched["_traceparent"] = carrier["traceparent"]
 
     with conn.cursor() as cur:
         cur.execute(
@@ -461,7 +461,10 @@ def recover_pending_transfers(
                     )
                     ev = cur.fetchone()
                     if ev and isinstance(ev.get("details"), dict):
-                        parent_ctx = extract_trace_context(ev["details"].get("_trace"))
+                        det = ev["details"]
+                        tp = det.get("_traceparent")
+                        trace_carrier = {"traceparent": tp} if tp else det.get("_trace")
+                        parent_ctx = extract_trace_context(trace_carrier)
             with safe_span(
                 "recovery.retry_transfer",
                 attributes={"transfer.id": str(t_id), "recovery.flag": True, "state.before": row.get("state")},

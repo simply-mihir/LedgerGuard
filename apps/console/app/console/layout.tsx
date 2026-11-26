@@ -36,7 +36,10 @@ const NAV_GROUPS: {
     group: 'Verify',
     items: [
       { href: '/console/chaos', label: 'Chaos Campaigns', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+      { href: '/console/formal', label: 'Formal Model', icon: 'M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z' },
       { href: '/console/audit', label: 'Audit Integrity', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+      { href: '/console/performance', label: 'Performance', icon: 'M3 3v18h18M7 14l4-4 4 4 5-5' },
+      { href: '/console/disaster-recovery', label: 'Disaster Recovery', icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4' },
       { href: '/console/experiments', label: 'Failure Lab', icon: 'M10 2v7.31M14 2v7.31M8.5 2h7M14 9.3a6.5 6.5 0 1 1-4 0' },
     ],
   },

@@ -79,6 +79,11 @@ def configure_tracing(mode: str | None = None) -> InMemorySpanExporter | None:
     if selected == "none":
         return None
 
+    if _PROVIDER_INITIALIZED:
+        if selected == "memory" and _MEMORY_EXPORTER is not None:
+            return _MEMORY_EXPORTER
+        return _MEMORY_EXPORTER
+
     resource = Resource.create({"service.name": "ledgerguard", "deployment.environment": settings.env})
     provider = TracerProvider(resource=resource)
 

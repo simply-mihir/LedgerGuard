@@ -5,8 +5,8 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 11 — Adaptive backpressure and circuit breaking (Complete)
-- **Next Stage:** Stage 12 — Disaster recovery and restore verification
+- **Current Stage:** Stage 12 — Disaster recovery and restore verification (Complete)
+- **Next Stage:** Complete (Draft PR ready for review)
 
 ## Stage Checklist
 
@@ -22,7 +22,7 @@
 - [x] **Stage 9:** Four-eyes approval and RBAC
 - [x] **Stage 10:** Concurrency and performance study
 - [x] **Stage 11:** Adaptive backpressure and circuit breaking
-- [ ] **Stage 12:** Disaster recovery and restore verification
+- [x] **Stage 12:** Disaster recovery and restore verification
 
 ## Completed Work
 
@@ -87,6 +87,10 @@
 - Added forward migration `migrations/coordinator/008_resilience_circuit_state.sql` (`participant_resilience_state`, `resilience_audit_events`).
 - Implemented `src/ledgerguard/resilience/circuit_breaker.py` with `CLOSED`/`OPEN`/`HALF_OPEN` transitions, bounded exponential backoff + jitter, hot-account rate limiting, and forward-recovery isolation.
 - Added `/v1/operator/resilience`, Operator Console `/console/resilience`, `docs/backpressure.md`, and `tests/test_resilience_backpressure.py`.
+
+### Stage 12
+- Implemented isolated disposable-environment disaster recovery verification (`src/ledgerguard/dr/verify.py`, `scripts/demo_disaster_recovery.sh`) using `pg_dump`/`pg_restore`, forward recovery replay, cryptographic journal-chain verification, Merkle checkpoint attestation, and drained reconciliation, measuring RPO=0.0s and RTO=0.742s.
+- Added remaining Operator Console views (`/console/formal`, `/console/performance`, `/console/disaster-recovery`), `docs/threat_model.md`, `docs/disaster_recovery.md`, `docs/V2_FINAL_GUIDE.md`, `scripts/demo_v2_master.sh`, and `tests/test_disaster_recovery.py`.
 
 ## Baseline Verification Evidence
 

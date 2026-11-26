@@ -669,7 +669,11 @@ def get_transfer_timeline(
             event_id=r["event_id"],
             transfer_id=r["transfer_id"],
             event_type=r["event_type"],
-            details=r.get("details") or {},
+            details={
+                k: v
+                for k, v in (r.get("details") or {}).items()
+                if not isinstance(v, dict)
+            },
             created_at=r["created_at"],
         )
         for r in rows
