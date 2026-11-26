@@ -2,13 +2,18 @@
 
 Placed between a client and PostgreSQL it can add latency, silently black-hole traffic
 (a network partition: connections hang, nothing is delivered), refuse or reset
-connections, and sever live connections abruptly (TCP RST). Faults are toggled at runtime
+connections, sever live connections abruptly (TCP RST), and damage the byte stream itself:
+corrupt bytes, swap adjacent chunks (reordering), duplicate chunks, or truncate a stream
+mid-message. Real TCP never does the last four (its checksums and sequence numbers prevent
+them), so they model a buggy middlebox or a failing NIC; the point is that the system must
+stay *safe* (never wrong money), not that it must stay live. Faults are toggled at runtime
 from the test harness, so the system under test experiences genuine socket-level failures.
 """
 
 from __future__ import annotations
 
 import contextlib
+import random
 import socket
 import struct
 import threading
@@ -37,6 +42,11 @@ class FaultProxy:
         self._latency_s = 0.0
         self._blackhole = False
         self._refuse = False
+        self._corrupt_rate = 0.0
+        self._reorder_rate = 0.0
+        self._duplicate_rate = 0.0
+        self._truncate_after: int | None = None
+        self._rng = random.Random(0)
         self._stopped = threading.Event()
         self._lock = threading.Lock()
         self._live: set[socket.socket] = set()
@@ -44,6 +54,10 @@ class FaultProxy:
         self.bytes_forwarded = 0
         self.bytes_dropped = 0
         self.severed = 0
+        self.chunks_corrupted = 0
+        self.chunks_reordered = 0
+        self.chunks_duplicated = 0
+        self.streams_truncated = 0
         self._thread = threading.Thread(target=self._accept_loop, daemon=True)
 
     # -- lifecycle ---------------------------------------------------------
@@ -77,10 +91,33 @@ class FaultProxy:
         """Reset every new connection immediately (as if the server were down)."""
         self._refuse = True
 
+    def corrupt(self, rate: float, seed: int = 0) -> None:
+        """Flip one random bit in a forwarded chunk with probability ``rate`` (seeded)."""
+        self._rng = random.Random(seed)
+        self._corrupt_rate = rate
+
+    def reorder(self, rate: float, seed: int = 0) -> None:
+        """Hold a chunk back and deliver it after the next one with probability ``rate``."""
+        self._rng = random.Random(seed)
+        self._reorder_rate = rate
+
+    def duplicate(self, rate: float, seed: int = 0) -> None:
+        """Deliver a chunk twice with probability ``rate``."""
+        self._rng = random.Random(seed)
+        self._duplicate_rate = rate
+
+    def truncate_after(self, nbytes: int) -> None:
+        """Forward at most ``nbytes`` more bytes per stream, then reset it mid-message."""
+        self._truncate_after = nbytes
+
     def heal(self) -> None:
         self._latency_s = 0.0
         self._blackhole = False
         self._refuse = False
+        self._corrupt_rate = 0.0
+        self._reorder_rate = 0.0
+        self._duplicate_rate = 0.0
+        self._truncate_after = None
 
     def sever(self) -> int:
         """Abruptly reset every live connection (mid-flight crash of the link)."""
@@ -131,6 +168,8 @@ class FaultProxy:
             threading.Thread(target=self._pump, args=(upstream, client, done), daemon=True).start()
 
     def _pump(self, src: socket.socket, dst: socket.socket | None, done: threading.Event) -> None:
+        held: bytes | None = None  # a chunk delayed by reordering
+        sent = 0
         try:
             while not self._stopped.is_set():
                 data = src.recv(65536)
@@ -141,8 +180,32 @@ class FaultProxy:
                     continue
                 if self._latency_s:
                     time.sleep(self._latency_s)
-                dst.sendall(data)
-                self.bytes_forwarded += len(data)
+                if self._corrupt_rate and self._rng.random() < self._corrupt_rate:
+                    buf = bytearray(data)
+                    buf[self._rng.randrange(len(buf))] ^= 1 << self._rng.randrange(8)
+                    data = bytes(buf)
+                    self.chunks_corrupted += 1
+                limit = self._truncate_after
+                if limit is not None and sent + len(data) > limit:
+                    dst.sendall(data[: max(0, limit - sent)])
+                    self.streams_truncated += 1
+                    _rst_close(dst)
+                    _rst_close(src)
+                    return
+                chunks = [data]
+                if self._duplicate_rate and self._rng.random() < self._duplicate_rate:
+                    chunks.append(data)
+                    self.chunks_duplicated += 1
+                if self._reorder_rate and held is None and self._rng.random() < self._reorder_rate:
+                    held = chunks.pop(0)
+                    self.chunks_reordered += 1
+                elif held is not None:
+                    chunks.append(held)  # deliver the later chunk first, then the held one
+                    held = None
+                for chunk in chunks:
+                    dst.sendall(chunk)
+                    sent += len(chunk)
+                    self.bytes_forwarded += len(chunk)
         except OSError:
             pass
         finally:

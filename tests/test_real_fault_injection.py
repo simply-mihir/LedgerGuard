@@ -28,6 +28,9 @@ from ledgerguard.faults.scenarios import (
     partition_destination,
     postgres_crash,
     random_kill_burst,
+    stream_corruption,
+    stream_reorder_duplicate,
+    stream_truncation,
 )
 
 # ---------------------------------------------------------------------------
@@ -126,6 +129,77 @@ def test_proxy_refuse_resets_new_connections(echo_server) -> None:
         assert _roundtrip(proxy.port) == b"ping"
 
 
+def test_proxy_corrupt_flips_bits_and_heals(echo_server) -> None:
+    with FaultProxy(echo_server) as proxy:
+        proxy.corrupt(1.0, seed=1)
+        payload = bytes(range(64))
+        got = _roundtrip(proxy.port, payload)
+        assert got != payload and len(got) == len(payload)
+        assert proxy.chunks_corrupted >= 1
+        proxy.heal()
+        assert _roundtrip(proxy.port, payload) == payload
+
+
+def test_proxy_duplicate_delivers_chunk_twice(echo_server) -> None:
+    with FaultProxy(echo_server) as proxy:
+        proxy.duplicate(1.0)
+        with socket.create_connection(("127.0.0.1", proxy.port), timeout=2) as c:
+            c.settimeout(1.0)
+            c.sendall(b"ab")
+            got = b""
+            with pytest.raises(TimeoutError):
+                while True:
+                    chunk = c.recv(64)
+                    if not chunk:
+                        break
+                    got += chunk
+        assert got.startswith(b"abab") and proxy.chunks_duplicated >= 1
+
+
+def test_proxy_reorder_swaps_adjacent_chunks() -> None:
+    received: list[bytes] = []
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+
+    def sink() -> None:
+        conn, _ = srv.accept()
+        conn.settimeout(1.0)
+        try:
+            while data := conn.recv(64):
+                received.append(data)
+        except OSError:
+            pass
+        finally:
+            conn.close()
+
+    t = threading.Thread(target=sink, daemon=True)
+    t.start()
+    with FaultProxy(srv.getsockname()) as proxy:
+        proxy.reorder(1.0)
+        with socket.create_connection(("127.0.0.1", proxy.port), timeout=2) as c:
+            c.sendall(b"first")
+            time.sleep(0.2)  # force a separate chunk
+            c.sendall(b"second")
+            t.join(timeout=3)
+        assert b"".join(received) == b"secondfirst" and proxy.chunks_reordered == 1
+    srv.close()
+
+
+def test_proxy_truncate_cuts_stream_mid_message(echo_server) -> None:
+    with FaultProxy(echo_server) as proxy:
+        proxy.truncate_after(4)
+        with socket.create_connection(("127.0.0.1", proxy.port), timeout=2) as c:
+            c.settimeout(2.0)
+            c.sendall(b"0123456789")
+            got = b""
+            with pytest.raises((ConnectionResetError, TimeoutError)):
+                while chunk := c.recv(64):
+                    got += chunk
+                raise ConnectionResetError
+        assert len(got) <= 4 and proxy.streams_truncated >= 1
+
+
 # ---------------------------------------------------------------------------
 # Real-database fault scenarios
 # ---------------------------------------------------------------------------
@@ -173,6 +247,16 @@ def test_tcp_reset_storm_never_breaks_invariants() -> None:
     r = connection_reset_storm(seed=5)
     _assert_all_invariants(r)
     assert r.facts["connections_reset"] >= 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("fn", [stream_corruption, stream_reorder_duplicate, stream_truncation])
+def test_damaged_byte_streams_never_break_safety_invariants(fn) -> None:
+    r = fn(seed=7)
+    _assert_all_invariants(r)
+    # Not vacuous: transfers really ran, the damage really landed, and nothing is left non-terminal.
+    assert r.transfers >= 2, r.facts
+    assert int(r.facts["chunks_or_streams_damaged"]) >= 1, r.facts
 
 
 @pytest.mark.integration

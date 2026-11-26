@@ -245,6 +245,68 @@ def connection_reset_storm(seed: int) -> ScenarioResult:
     return _run("TCP reset storm", ["RST on live connections, random link"], body)
 
 
+def _stream_damage(name: str, faults: list[str], damage: Callable[[FaultEnv], None],
+                   counter: Callable[[FaultEnv], int], seed: int) -> ScenarioResult:
+    """Run a transfer burst while the byte streams are damaged, then heal and recover.
+
+    A damaged stream may stall or kill workers (liveness), but must never produce wrong money
+    (safety): every invariant is checked after healing and forward recovery.
+    """
+
+    def body(env: FaultEnv, facts: dict[str, Any]) -> None:
+        w = WorkerProcess(env, count=12, pause_ms=40)
+        try:
+            # Let some transfers complete cleanly first, so the damage lands mid-burst
+            # and the scenario cannot pass vacuously with zero transfers.
+            w.wait_for(lambda: w.count("done") >= 2, 60)
+            facts["clean_transfers_before_damage"] = w.count("done")
+            damage(env)
+            finished = w.wait(25)
+            facts["worker_finished_under_fault"] = finished
+        finally:
+            facts["chunks_or_streams_damaged"] = counter(env)
+            env.heal_all()
+            w.kill()
+        facts["seed"] = seed
+
+    return _run(name, faults, body)
+
+
+def stream_corruption(seed: int) -> ScenarioResult:
+    """Flip random bits in ~15% of the chunks flowing to/from all three databases."""
+
+    def damage(env: FaultEnv) -> None:
+        for i, p in enumerate(env.proxies.values()):
+            p.corrupt(0.15, seed=seed + i)
+
+    return _stream_damage("Byte corruption", ["bit flips in 15% of chunks"], damage,
+                          lambda env: sum(p.chunks_corrupted for p in env.proxies.values()), seed)
+
+
+def stream_reorder_duplicate(seed: int) -> ScenarioResult:
+    """Swap adjacent chunks and duplicate others on every database link."""
+
+    def damage(env: FaultEnv) -> None:
+        for i, p in enumerate(env.proxies.values()):
+            p.reorder(0.2, seed=seed + i)
+            p.duplicate(0.1, seed=seed + 10 + i)
+
+    return _stream_damage(
+        "Chunk reorder + duplicate", ["20% adjacent-chunk swaps", "10% duplicated chunks"], damage,
+        lambda env: sum(p.chunks_reordered + p.chunks_duplicated for p in env.proxies.values()), seed)
+
+
+def stream_truncation(seed: int) -> ScenarioResult:
+    """Cut every stream after a few kilobytes, mid-message, on all database links."""
+
+    def damage(env: FaultEnv) -> None:
+        for p in env.proxies.values():
+            p.truncate_after(1500)
+
+    return _stream_damage("Mid-message truncation", ["stream cut + RST after 1.5 KB"], damage,
+                          lambda env: sum(p.streams_truncated for p in env.proxies.values()), seed)
+
+
 def api_kill_idempotent_replay(seed: int, n: int = 30) -> ScenarioResult:
     """SIGKILL the API mid-burst; replaying the same Idempotency-Keys must apply each once."""
     rng = random.Random(seed)
@@ -398,6 +460,9 @@ def run_campaign(seed: int = 42, include_containers: bool = False) -> FaultCampa
         latency_burst(),
         partition_destination(),
         connection_reset_storm(seed),
+        stream_corruption(seed),
+        stream_reorder_duplicate(seed),
+        stream_truncation(seed),
         api_kill_idempotent_replay(seed),
     ]
     if include_containers:

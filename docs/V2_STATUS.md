@@ -158,3 +158,15 @@
 - `npm audit` (including dev tooling): 6 moderate findings (minimatch DoS reachable only through the ESLint toolchain) fixed with `npm audit fix` (lockfile only); now 0. `pip-audit` over the full `uv.lock` set (runtime + dev extras): 0 known vulnerabilities.
 - CI now audits dev dependencies too (`npm audit` without `--omit=dev`; `uv export --all-extras` for `pip-audit`), so a vulnerable dev tool fails the build.
 - Scope: this checks known advisories only; it is not a substitute for a third-party penetration test.
+
+## Fault proxy: stream damage (gap 3)
+
+`FaultProxy` gained seeded bit corruption, adjacent-chunk reordering, chunk duplication and
+mid-message truncation. Three campaign scenarios (byte corruption, reorder + duplicate,
+truncation) start the damage only after two clean transfers, then heal, run forward recovery
+and check all nine invariants; tests require real transfers and real damage so a pass cannot
+be vacuous. All pass. Honest scope: real TCP prevents these faults, so they model a faulty
+middlebox; only a handful of chunks are damaged per run because protocol desync stalls the
+worker, so this is a smoke test of integrity handling, not a fuzzer. There is still no TLS, so
+payload integrity relies on TCP and PostgreSQL framing. Disk, clock and fsync faults remain
+unsimulated, and the formal-model scope gap is separate.
