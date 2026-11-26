@@ -14,7 +14,7 @@
   "crash": [
     {
       "bystander_state": "SETTLED",
-      "bystander_wait_ms": 49.3,
+      "bystander_wait_ms": 69.5,
       "clearing_delta_after": 0,
       "crash_point": "after durable COMMIT decision, before confirms",
       "customer_funds_delta_after": 0,
@@ -22,13 +22,13 @@
       "outcome_at_crash": "IN_DOUBT",
       "partial_posting_visible": false,
       "protocol": "TCC",
-      "recovery_ms": 26.4,
+      "recovery_ms": 36.2,
       "resources_pinned_in_window": "1000 paise held as rows (no row locks held)",
       "unresolved_after": 0
     },
     {
       "bystander_state": "BLOCKED",
-      "bystander_wait_ms": 1507.3,
+      "bystander_wait_ms": 1510.4,
       "clearing_delta_after": 0,
       "crash_point": "both legs PREPARED, before COMMIT PREPARED",
       "customer_funds_delta_after": 0,
@@ -36,13 +36,13 @@
       "outcome_at_crash": "IN_DOUBT",
       "partial_posting_visible": false,
       "protocol": "XA-2PC",
-      "recovery_ms": 88.2,
+      "recovery_ms": 46.3,
       "resources_pinned_in_window": "2 prepared txns holding row locks on both ledgers",
       "unresolved_after": 0
     },
     {
       "bystander_state": "SETTLED",
-      "bystander_wait_ms": 33.6,
+      "bystander_wait_ms": 22.7,
       "clearing_delta_after": 0,
       "crash_point": "after step 1 (source debited), before step 2",
       "customer_funds_delta_after": 0,
@@ -50,7 +50,7 @@
       "outcome_at_crash": "IN_DOUBT",
       "partial_posting_visible": true,
       "protocol": "Saga",
-      "recovery_ms": 7.6,
+      "recovery_ms": 3.6,
       "resources_pinned_in_window": "none (source already debited and committed)",
       "unresolved_after": 0
     }
@@ -86,81 +86,83 @@
       "protocol": "Saga"
     }
   ],
-  "generated_at": "2026-11-26T09:42:33+00:00",
-  "git_sha": "5e09349b1abab41552b1f568075448b3dfbd0238",
+  "generated_at": "2026-11-26T10:53:28+00:00",
+  "git_sha": "98e24278e5d995239275c620acd9eb06ffc6e501",
+  "git_tree": "4368bb6ff4c78501f124cd9a22ed8b72444de520",
   "schema_version": 1,
   "throughput": [
     {
       "not_settled": 0,
       "ops": 48,
-      "p50_ms": 92.91,
-      "p95_ms": 133.55,
+      "p50_ms": 87.34,
+      "p95_ms": 135.78,
       "protocol": "TCC",
-      "seconds": 1.195,
+      "seconds": 1.157,
       "settled": 48,
-      "tps": 40.16,
+      "tps": 41.48,
       "workers": 4,
       "workload": "uncontended"
     },
     {
       "not_settled": 0,
       "ops": 48,
-      "p50_ms": 94.76,
-      "p95_ms": 119.08,
+      "p50_ms": 98.8,
+      "p95_ms": 117.46,
       "protocol": "TCC",
-      "seconds": 1.179,
+      "seconds": 1.214,
       "settled": 48,
-      "tps": 40.72,
+      "tps": 39.55,
       "workers": 4,
       "workload": "hot_source"
     },
     {
       "not_settled": 0,
       "ops": 48,
-      "p50_ms": 28.21,
-      "p95_ms": 85.42,
+      "p50_ms": 40.63,
+      "p95_ms": 107.16,
       "protocol": "XA-2PC",
-      "seconds": 0.441,
+      "seconds": 0.628,
       "settled": 48,
-      "tps": 108.76,
+      "tps": 76.39,
       "workers": 4,
       "workload": "uncontended"
     },
     {
       "not_settled": 0,
       "ops": 48,
-      "p50_ms": 34.06,
-      "p95_ms": 90.38,
+      "p50_ms": 31.74,
+      "p95_ms": 82.22,
       "protocol": "XA-2PC",
-      "seconds": 0.538,
+      "seconds": 0.519,
       "settled": 48,
-      "tps": 89.19,
+      "tps": 92.55,
       "workers": 4,
       "workload": "hot_source"
     },
     {
       "not_settled": 0,
       "ops": 48,
-      "p50_ms": 15.06,
-      "p95_ms": 16.95,
+      "p50_ms": 13.22,
+      "p95_ms": 17.23,
       "protocol": "Saga",
-      "seconds": 0.19,
+      "seconds": 0.172,
       "settled": 48,
-      "tps": 252.62,
+      "tps": 278.98,
       "workers": 4,
       "workload": "uncontended"
     },
     {
       "not_settled": 0,
       "ops": 48,
-      "p50_ms": 14.73,
-      "p95_ms": 22.08,
+      "p50_ms": 17.14,
+      "p95_ms": 26.01,
       "protocol": "Saga",
-      "seconds": 0.2,
+      "seconds": 0.208,
       "settled": 48,
-      "tps": 239.71,
+      "tps": 230.68,
       "workers": 4,
       "workload": "hot_source"
     }
-  ]
+  ],
+  "working_tree_clean": true
 }
