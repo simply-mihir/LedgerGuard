@@ -960,3 +960,85 @@ def get_operator_clearing_as_of(
 
     dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
     return reconstruct_clearing_as_of(settings.ledger1_db_url, settings.ledger2_db_url, dt).model_dump()
+
+
+@router.post("/operator/transfers/{transfer_id}/refund")
+def issue_operator_refund(
+    transfer_id: UUID,
+    body: dict[str, Any],
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Issue a full or partial idempotent refund for a settled transfer."""
+    from ledgerguard.disputes import RefundLimitExceededError, issue_refund
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    try:
+        return issue_refund(
+            settings.coordinator_db_url,
+            ledger_urls,
+            original_transfer_id=transfer_id,
+            amount=AmountPaise(int(body["amount_minor"])),
+            idempotency_key=str(body["idempotency_key"]),
+            reason=str(body.get("reason", "operator_refund")),
+            actor=str(body.get("actor", "operator")),
+        )
+    except RefundLimitExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.get("/operator/disputes")
+def list_operator_disputes(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """List chargeback disputes."""
+    from ledgerguard.disputes import list_disputes
+
+    return list_disputes(settings.coordinator_db_url, limit=limit)
+
+
+@router.post("/operator/disputes")
+def open_operator_dispute(
+    body: dict[str, Any],
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Open a chargeback dispute on a settled transfer."""
+    from ledgerguard.disputes import DisputeTransitionError, RefundLimitExceededError, open_dispute
+
+    try:
+        return open_dispute(
+            settings.coordinator_db_url,
+            transfer_id=UUID(str(body["transfer_id"])),
+            amount=AmountPaise(int(body["amount_minor"])),
+            reason_code=str(body["reason_code"]),
+            actor=str(body.get("actor", "operator")),
+            evidence_metadata=body.get("evidence_metadata") or {},
+        )
+    except (DisputeTransitionError, RefundLimitExceededError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/disputes/{dispute_id}/transition")
+def transition_operator_dispute(
+    dispute_id: UUID,
+    body: dict[str, Any],
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Advance a dispute state machine (APPROVED triggers compensating refund)."""
+    from ledgerguard.disputes import DisputeState, DisputeTransitionError, transition_dispute
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    try:
+        return transition_dispute(
+            settings.coordinator_db_url,
+            ledger_urls,
+            dispute_id=dispute_id,
+            to_state=DisputeState(str(body["to_state"])),
+            actor=str(body.get("actor", "operator")),
+            reason_code=body.get("reason_code"),
+            evidence_metadata=body.get("evidence_metadata"),
+        )
+    except (DisputeTransitionError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
