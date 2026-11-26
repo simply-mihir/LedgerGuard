@@ -102,15 +102,33 @@ class FaultCampaignReport(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _check_when_databases_up(env: FaultEnv, attempts: int = 3) -> list[InvariantResult]:
+    """Evaluate the (read-only) invariants, re-running if a database restarts mid-check.
+
+    A container crash scenario can still be finishing its restart when checking begins; the
+    checks only read, so repeating them after every database answers cannot mask a violation.
+    """
+    for attempt in range(attempts):
+        try:
+            return check_invariants(env)
+        except psycopg.OperationalError:
+            if attempt == attempts - 1:
+                raise
+            for url in (settings.coordinator_db_url, settings.ledger1_db_url, settings.ledger2_db_url):
+                _wait_db_up(url)
+    raise AssertionError("unreachable")
+
+
 def _finish(name: str, faults: list[str], env: FaultEnv, t0: float, facts: dict[str, Any],
             recovered: int) -> ScenarioResult:
+    invariants = _check_when_databases_up(env)
     rows = env.transfer_rows()
     res = ScenarioResult(
         name=name, faults=faults, transfers=len(rows),
         settled=sum(1 for _, s in rows if s == "SETTLED"),
         cancelled=sum(1 for _, s in rows if s in ("CANCELLED", "REJECTED")),
         recovered_by_recovery_loop=recovered, facts=facts,
-        invariants=check_invariants(env), seconds=round(time.perf_counter() - t0, 2),
+        invariants=invariants, seconds=round(time.perf_counter() - t0, 2),
     )
     return res
 
