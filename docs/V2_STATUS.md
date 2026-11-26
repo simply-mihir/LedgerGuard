@@ -5,13 +5,13 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 0 — Repository and branch preparation (Complete)
-- **Next Stage:** Stage 1 — Independent reference model and history checker
+- **Current Stage:** Stage 1 — Independent reference model and history checker (Complete)
+- **Next Stage:** Stage 2 — Automated chaos campaign engine
 
 ## Stage Checklist
 
 - [x] **Stage 0:** Repository and branch preparation
-- [ ] **Stage 1:** Independent reference model and history checker
+- [x] **Stage 1:** Independent reference model and history checker
 - [ ] **Stage 2:** Automated chaos campaign engine
 - [ ] **Stage 3:** TLA+ formal specification
 - [ ] **Stage 4:** Tamper-evident audit journal
@@ -31,6 +31,12 @@
 - Created `feat/ledgerguard-v2` stacked on `feat/operator-console-redesign`.
 - Established `docs/V2_STATUS.md`, `docs/architecture/v2_architecture.md`, `docs/invariants.md`, and machine-readable invariant catalogue (`src/ledgerguard/domain/invariants.py`).
 - Executed full baseline verification suite prior to any V2 code changes.
+
+### Stage 1
+- Implemented independent, pure-Python reference model (`src/ledgerguard/reference/model.py`) with zero imports from production coordinator, worker, participant, or database modules.
+- Defined canonical execution history schema (`src/ledgerguard/reference/history.py`) and step-by-step history checker (`src/ledgerguard/reference/checker.py`) checking intermediate states, decision monotonicity, journal balance, clearing conservation, unresolved holds, and partial reachability.
+- Added CLI command `uv run python -m ledgerguard.cli check-history <history-file>` supporting text and JSON output.
+- Added Hypothesis stateful tests and divergence detection tests (`tests/test_reference_checker.py`).
 
 ## Baseline Verification Evidence
 

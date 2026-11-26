@@ -166,6 +166,20 @@ def cmd_migrate(args: argparse.Namespace) -> None:
         print(f"Core migrations applied: coordinator={applied_coord}, ledger={applied_ledger}")
 
 
+def cmd_check_history(args: argparse.Namespace) -> None:
+    """Check an execution history JSON file against the independent reference model."""
+    from ledgerguard.reference import ExecutionHistory, check_history, format_report_text
+
+    history = ExecutionHistory.from_json_file(args.history_file)
+    report = check_history(history)
+    if args.format == "json":
+        print(report.model_dump_json(indent=2))
+    else:
+        print(format_report_text(report))
+    if report.status != "PASS":
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="LedgerGuard management CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -219,6 +233,19 @@ def main() -> None:
         help="Provision demo operator with pre-configured TOTP",
     )
     seed_parser.set_defaults(func=cmd_seed_demo_operator)
+
+    history_parser = subparsers.add_parser(
+        "check-history",
+        help="Verify a canonical execution history JSON file against the independent reference model",
+    )
+    history_parser.add_argument("history_file", help="Path to execution history JSON file")
+    history_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    history_parser.set_defaults(func=cmd_check_history)
 
     args = parser.parse_args()
     args.func(args)
