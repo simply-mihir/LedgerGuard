@@ -369,11 +369,11 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 74 passing tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 186 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
-- **Type Checking:** Zero Mypy type violations across 35 source files (`uv run mypy src`)
-- **Frontend Unit Suite:** 45 passing tests across 18 suites (`npm test` in `apps/console`)
-- **Real Browser E2E Suite:** 72 passing tests across Chromium, Firefox, and WebKit (`npx playwright test` in `apps/console`)
+- **Type Checking:** Zero Mypy type violations across 75 source files (`uv run mypy src`)
+- **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
+- **Real Browser E2E Suite:** 93 tests (31 per browser) across Chromium, Firefox, and WebKit (`npx playwright test` in `apps/console`)
 - **Rendered Accessibility:** 0 critical/serious Axe violations; tested against WCAG 2.2 AA criteria (`@axe-core/playwright`)
 - **Console Build:** Clean Next.js 15 production build (`npm run build`)
 - **Production Vulnerabilities:** Zero known production vulnerabilities detected (`npm audit --omit=dev` and `pip-audit`)
@@ -421,16 +421,34 @@ cd apps/console && npm run build && cd ../..
 | Test Module | Tests | Primary Verification Scope |
 | :--- | :---: | :--- |
 | [`tests/test_accounting_kernel.py`](tests/test_accounting_kernel.py) | 14 | Integer paise bounds, balanced double-entry trigger, journal immutability triggers, role permission boundaries, zero-balance closure rules. |
-| [`tests/test_local_transfers.py`](tests/test_local_transfers.py) | 9 | Atomic intra-ledger transfers, idempotency fingerprints, 100 concurrent race spends against balance limit, compensating reversals. |
-| [`tests/test_durable_workflow.py`](tests/test_durable_workflow.py) | 7 | Transactional outbox polling via `SKIP LOCKED`, durable coordinator decisions, command inbox deduplication, holds reservation lifecycle. |
-| [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) | 11 | TCC-style failure matrix: lost prepare replies, crash after `COMMIT`, crash between confirms, frozen/closed account rejections, idempotency retries. |
+| [`tests/test_api_authorization.py`](tests/test_api_authorization.py) | 29 | Read-only role enforcement on every mutating route, durable reconciliation runs, session-bound audit actors, validated request bodies, production secret refusal. |
 | [`tests/test_audit_reconciliation.py`](tests/test_audit_reconciliation.py) | 4 | Multi-database reachability probing, corrupted hold cache detection, stopped-and-drained full cluster audit. |
-| [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
-| [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 16 | Argon2id verification, SHA-256 session token hashing, idle & absolute expiry, TOTP drift & replay rejection, source-based rate limiting, CSRF and origin validation, proxy security. |
 | [`tests/test_auth_permissions.py`](tests/test_auth_permissions.py) | 2 | PostgreSQL role boundary enforcement: reporter role denied SELECT on auth tables; app role denied DELETE on operators and UPDATE on login attempts. |
+| [`tests/test_chaos_campaign.py`](tests/test_chaos_campaign.py) | 6 | Deterministic seeded chaos campaign engine with post-recovery invariant checks. |
+| [`tests/test_console_api_consistency.py`](tests/test_console_api_consistency.py) | 12 | Console/API contract, ledger-2 routing via the account directory, authentication on financial routes, session-bound approval identity, exact-origin CSRF. |
+| [`tests/test_disaster_recovery.py`](tests/test_disaster_recovery.py) | 2 | Disaster recovery and restore verification. |
+| [`tests/test_disputes_refunds.py`](tests/test_disputes_refunds.py) | 2 | Partial/full refunds, concurrent refund limits, chargeback disputes. |
+| [`tests/test_distributed_failures.py`](tests/test_distributed_failures.py) | 13 | TCC failure matrix: lost prepare replies, crash after `COMMIT`, crash between confirms, frozen/closed account rejections, idempotency retries. |
+| [`tests/test_dual_control_rbac.py`](tests/test_dual_control_rbac.py) | 4 | Four-eyes approvals, separation of duties, MFA and recent-auth rules. |
+| [`tests/test_durable_workflow.py`](tests/test_durable_workflow.py) | 7 | Transactional outbox polling via `SKIP LOCKED`, durable coordinator decisions, command inbox deduplication, holds reservation lifecycle. |
+| [`tests/test_history_reconstruction.py`](tests/test_history_reconstruction.py) | 4 | As-of-time balance reconstruction and checksummed snapshots. |
+| [`tests/test_local_transfers.py`](tests/test_local_transfers.py) | 9 | Atomic intra-ledger transfers, idempotency fingerprints, 100 concurrent race spends against balance limit, compensating reversals. |
+| [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
+| [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 16 | Argon2id verification, SHA-256 session token hashing, idle & absolute expiry, TOTP drift & replay rejection, rate limiting, CSRF and origin validation, proxy security. |
+| [`tests/test_opposite_direction_concurrency.py`](tests/test_opposite_direction_concurrency.py) | 2 | Opposite-direction transfers on shared accounts (deadlock-free lock ordering). |
+| [`tests/test_perf_study.py`](tests/test_perf_study.py) | 8 | Concurrency and performance study harness and provenance. |
+| [`tests/test_protocol_comparison.py`](tests/test_protocol_comparison.py) | 6 | TCC vs XA two-phase commit vs Saga on real PostgreSQL: crash windows, atomicity, bystander blocking. |
+| [`tests/test_real_fault_injection.py`](tests/test_real_fault_injection.py) | 14 | SIGKILL of worker/API/PostgreSQL, TCP latency/partition/reset proxy, post-recovery invariants (container scenarios opt-in). |
+| [`tests/test_recovery_explain.py`](tests/test_recovery_explain.py) | 2 | Deterministic explainable recovery diagnostics. |
+| [`tests/test_reference_checker.py`](tests/test_reference_checker.py) | 7 | Independent reference model and canonical history checker. |
 | [`tests/test_reference_model.py`](tests/test_reference_model.py) | 1 | Hypothesis stateful property tests comparing concurrent multi-account execution against an in-memory reference model. |
-| [`tests/test_smoke.py`](tests/test_smoke.py) | 5 | Live PostgreSQL 17 connectivity, migration tracking tables, application connection role boundary enforcement. |
-| **Total** | **74** | **100% Passing** |
+| [`tests/test_resilience_backpressure.py`](tests/test_resilience_backpressure.py) | 2 | Adaptive backpressure and per-participant circuit breaking. |
+| [`tests/test_smoke.py`](tests/test_smoke.py) | 3 | Live PostgreSQL 17 connectivity, migration tracking tables, application connection role boundary enforcement. |
+| [`tests/test_tamper_evident_journal.py`](tests/test_tamper_evident_journal.py) | 6 | Journal hash chains, checkpoints and tamper detection. |
+| [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
+| [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
+| [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
+| **Total** | **188** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 

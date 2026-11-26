@@ -84,3 +84,4 @@ artifacts/
 # TLC counterexample traces and state dirs
 formal/tla/*_TTrace_*
 formal/tla/states*/
+.next-e2e/
