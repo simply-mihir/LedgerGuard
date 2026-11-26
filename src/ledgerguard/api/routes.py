@@ -1042,3 +1042,133 @@ def transition_operator_dispute(
         )
     except (DisputeTransitionError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/operator/approvals")
+def list_operator_approvals(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """List four-eyes approval requests."""
+    from ledgerguard.approval import list_approval_requests
+
+    return list_approval_requests(settings.coordinator_db_url, limit=limit)
+
+
+@router.post("/operator/approvals")
+def create_operator_approval(
+    body: dict[str, Any],
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Submit a new sensitive action for four-eyes approval."""
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        SensitiveAction,
+        create_approval_request,
+    )
+
+    try:
+        return create_approval_request(
+            settings.coordinator_db_url,
+            action_type=SensitiveAction(str(body["action_type"])),
+            payload=dict(body.get("payload") or {}),
+            initiator_id=str(body["initiator_id"]),
+            initiator_role=str(body.get("initiator_role", "OPERATOR")),
+            ttl_seconds=int(body.get("ttl_seconds", 900)),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/approvals/{request_id}/approve")
+def approve_operator_request(
+    request_id: UUID,
+    body: dict[str, Any],
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Approve a pending dual-control request."""
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        ApprovalStateError,
+        approve_request,
+    )
+
+    try:
+        return approve_request(
+            settings.coordinator_db_url,
+            request_id=request_id,
+            approver_id=str(body["approver_id"]),
+            approver_role=str(body.get("approver_role", "APPROVER")),
+            mfa_verified=bool(body.get("mfa_verified", False)),
+            auth_age_seconds=int(body.get("auth_age_seconds", 0)),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ApprovalStateError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/approvals/{request_id}/reject")
+def reject_operator_request(
+    request_id: UUID,
+    body: dict[str, Any],
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Reject a pending dual-control request."""
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        ApprovalStateError,
+        reject_request,
+    )
+
+    try:
+        return reject_request(
+            settings.coordinator_db_url,
+            request_id=request_id,
+            actor_id=str(body["actor_id"]),
+            actor_role=str(body.get("actor_role", "APPROVER")),
+            reason=str(body.get("reason", "rejected_by_approver")),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ApprovalStateError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/approvals/{request_id}/execute")
+def execute_operator_approval(
+    request_id: UUID,
+    body: dict[str, Any],
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Idempotently execute an approved dual-control request."""
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        ApprovalStateError,
+        execute_approved_request,
+    )
+
+    try:
+        return execute_approved_request(
+            settings.coordinator_db_url,
+            request_id=request_id,
+            executor_id=str(body["executor_id"]),
+            executor_role=str(body.get("executor_role", "OPERATOR")),
+            expected_payload=body.get("payload"),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ApprovalStateError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/operator/approvals/export")
+def export_operator_approvals(
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Export immutable dual-control approval audit events."""
+    from ledgerguard.approval import export_approval_audit
+
+    return export_approval_audit(settings.coordinator_db_url)
