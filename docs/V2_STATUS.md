@@ -5,15 +5,15 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 2 — Automated chaos campaign engine (Complete)
-- **Next Stage:** Stage 3 — TLA+ formal specification
+- **Current Stage:** Stage 3 — TLA+ formal specification (Complete)
+- **Next Stage:** Stage 4 — Tamper-evident audit journal
 
 ## Stage Checklist
 
 - [x] **Stage 0:** Repository and branch preparation
 - [x] **Stage 1:** Independent reference model and history checker
 - [x] **Stage 2:** Automated chaos campaign engine
-- [ ] **Stage 3:** TLA+ formal specification
+- [x] **Stage 3:** TLA+ formal specification
 - [ ] **Stage 4:** Tamper-evident audit journal
 - [ ] **Stage 5:** End-to-end OpenTelemetry tracing
 - [ ] **Stage 6:** Explainable recovery diagnostics
@@ -43,6 +43,12 @@
 - Added CLI runner `scripts/run_chaos_campaign.py` and bounded CI chaos campaign step in `.github/workflows/ci.yml`.
 - Added production-gated operator API endpoints (`/v1/operator/chaos/run`, `/v1/operator/chaos/campaigns`) and Operator Console Chaos Campaigns view (`apps/console/app/console/chaos/page.tsx`) under grouped navigation (`Observe` / `Operate` / `Verify`).
 - Added chaos campaign tests (`tests/test_chaos_campaign.py`) and documentation (`docs/chaos_testing.md`).
+
+### Stage 3
+- Created TLA+ formal specification (`formal/tla/LedgerGuardTCC.tla`, `formal/tla/LedgerGuardTCC.cfg`) modeling TCC states (`INIT`..`SETTLED`/`CANCELLED`), durable decisions, command inbox deduplication, cancellation tombstones, worker crash/restart, and bounded message loss.
+- Verified 8 safety invariants and 4 temporal/liveness properties under weak fairness via pinned `tla2tools.jar v1.8.0` (`902 states generated, 189 distinct states, depth 10, 0 errors`).
+- Added intentionally broken variant (`LedgerGuardTCC_broken.tla`) confirming TLC detects `DecisionMonotonicity` violation (exit 13).
+- Added `scripts/run_tla_model_check.sh`, `tla` CI job in `.github/workflows/ci.yml`, and `docs/formal_verification.md` with abstraction boundaries and implementation traceability table.
 
 ## Baseline Verification Evidence
 
