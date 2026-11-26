@@ -23,6 +23,9 @@ def get_connection_pool(db_url: str, min_size: int = 2, max_size: int = 15) -> C
             min_size=min_size,
             max_size=max_size,
             open=True,
+            # Validate a connection when it is checked out, so connections killed by a database
+            # crash or restart are discarded transparently instead of failing the first caller.
+            check=ConnectionPool.check_connection,
             kwargs={"row_factory": dict_row},
         )
     return _pools[db_url]

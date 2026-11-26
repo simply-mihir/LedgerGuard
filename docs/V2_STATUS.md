@@ -170,3 +170,7 @@ middlebox; only a handful of chunks are damaged per run because protocol desync 
 worker, so this is a smoke test of integrity handling, not a fuzzer. There is still no TLS, so
 payload integrity relies on TCP and PostgreSQL framing. Disk, clock and fsync faults remain
 unsimulated, and the formal-model scope gap is separate.
+
+Follow-up found by the container-crash campaign: after a PostgreSQL crash the connection pool
+kept dead connections and the first callers failed. The pool now validates each connection at
+checkout (`check=ConnectionPool.check_connection`), costing one cheap round trip per checkout.
