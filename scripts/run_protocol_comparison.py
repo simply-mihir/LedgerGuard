@@ -14,6 +14,9 @@ from ledgerguard.evidence import require_clean_tree
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ops", type=int, default=48, help="transfers per throughput workload")
+    parser.add_argument("--repeats", type=int, default=12,
+                        help="independent measured runs per cell (>=2 gives 95%% CIs)")
+    parser.add_argument("--warmup-ops", type=int, default=8)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--bystander-timeout-ms", type=int, default=1500)
     parser.add_argument("--out-dir", type=Path, default=Path("docs/comparison"))
@@ -25,6 +28,8 @@ def main() -> int:
     report = run_comparison(
         ComparisonConfig(
             ops=args.ops,
+            repeats=args.repeats,
+            warmup_ops=args.warmup_ops,
             workers=args.workers,
             bystander_timeout_ms=args.bystander_timeout_ms,
         )

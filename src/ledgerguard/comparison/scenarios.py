@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+import os
 import platform
 import statistics
 import time
@@ -22,6 +24,7 @@ from ledgerguard.comparison.protocols import (
     TransferProtocol,
     XaProtocol,
 )
+from ledgerguard.comparison.stats import distinguishable, summarize
 from ledgerguard.config import settings
 from ledgerguard.coordinator.directory_service import provision_account, register_customer
 from ledgerguard.domain.constants import SYSTEM_CLEARING_ACCOUNT_ID
@@ -36,6 +39,8 @@ class ComparisonConfig(BaseModel):
     """Parameters of one comparison run."""
 
     ops: int = 24
+    repeats: int = 1  # independent measured runs per (protocol, workload); >1 adds CIs
+    warmup_ops: int = 8  # discarded warm-up run before measuring (only when repeats > 1)
     workers: int = 4
     amount_minor: int = 1_000
     funding_minor: int = 5_000_000
@@ -54,6 +59,12 @@ class ThroughputResult(BaseModel):
     tps: float
     p50_ms: float
     p95_ms: float
+    repeats: int = 1
+    tps_sd: float = 0.0
+    tps_ci95: tuple[float, float] | None = None
+    p50_ci95: tuple[float, float] | None = None
+    p95_ci95: tuple[float, float] | None = None
+    tps_runs: list[float] = Field(default_factory=list)
 
 
 class CrashResult(BaseModel):
@@ -107,14 +118,35 @@ class ComparisonReport(BaseModel):
             "",
             "## S1. Throughput and latency (settled transfers only)",
             "",
-            "| Protocol | Workload | Settled/Ops | TPS | P50 ms | P95 ms |",
-            "|---|---|---:|---:|---:|---:|",
+            f"Each cell is the mean over `repeats` independent runs (protocols interleaved "
+            f"round-robin, one discarded warm-up run); brackets are 95% Student-t confidence "
+            f"intervals across runs. `ops` per run = {self.config.ops}.",
+            "",
+            "| Protocol | Workload | Runs | Settled/Ops (last run) | TPS mean [95% CI] | TPS sd | "
+            "P50 ms mean [95% CI] | P95 ms mean [95% CI] |",
+            "|---|---|---:|---:|---:|---:|---:|---:|",
         ]
+
+        def ci(mean: float, bounds: tuple[float, float] | None) -> str:
+            if bounds is None or not all(map(math.isfinite, bounds)):
+                return f"{mean}"
+            return f"{mean} [{bounds[0]:.2f}, {bounds[1]:.2f}]"
+
         for t in self.throughput:
             lines.append(
-                f"| {t.protocol} | {t.workload} | {t.settled}/{t.ops} | {t.tps} | "
-                f"{t.p50_ms} | {t.p95_ms} |"
+                f"| {t.protocol} | {t.workload} | {t.repeats} | {t.settled}/{t.ops} | "
+                f"{ci(t.tps, t.tps_ci95)} | {t.tps_sd} | {ci(t.p50_ms, t.p50_ci95)} | "
+                f"{ci(t.p95_ms, t.p95_ci95)} |"
             )
+        lines += ["", "TPS differences between protocols (non-overlapping 95% CIs):", ""]
+        for workload in ("uncontended", "hot_source"):
+            rows = [t for t in self.throughput if t.workload == workload and t.tps_ci95]
+            for i, a in enumerate(rows):
+                for b in rows[i + 1 :]:
+                    assert a.tps_ci95 and b.tps_ci95
+                    verdict = ("distinguishable" if distinguishable(a.tps_ci95, b.tps_ci95)
+                               else "NOT distinguishable")
+                    lines.append(f"- {workload}: {a.protocol} vs {b.protocol}: {verdict}")
         lines += [
             "",
             "## S2. Coordinator crash mid-transfer",
@@ -249,7 +281,8 @@ def _pct(values: list[float], q: float) -> float:
     return round(ordered[idx], 2)
 
 
-def _throughput(proto: TransferProtocol, workload: str, cfg: ComparisonConfig) -> ThroughputResult:
+def _throughput_once(proto: TransferProtocol, workload: str, cfg: ComparisonConfig,
+                     ops: int) -> ThroughputResult:
     if workload == "uncontended":
         pairs = [
             (_new_account("ledger-1", cfg.funding_minor), _new_account("ledger-2", 0))
@@ -272,13 +305,13 @@ def _throughput(proto: TransferProtocol, workload: str, cfg: ComparisonConfig) -
 
     t_start = time.perf_counter()
     with ThreadPoolExecutor(max_workers=cfg.workers) as pool:
-        list(pool.map(one, range(cfg.ops)))
+        list(pool.map(one, range(ops)))
     elapsed = time.perf_counter() - t_start
     settled = states.count(SETTLED)
     return ThroughputResult(
         protocol=proto.name,
         workload=workload,
-        ops=cfg.ops,
+        ops=ops,
         workers=cfg.workers,
         settled=settled,
         not_settled=len(states) - settled,
@@ -287,6 +320,37 @@ def _throughput(proto: TransferProtocol, workload: str, cfg: ComparisonConfig) -
         p50_ms=_pct(latencies, 0.5),
         p95_ms=_pct(latencies, 0.95),
     )
+
+
+def _throughput_all(protos: list[TransferProtocol], cfg: ComparisonConfig) -> list[ThroughputResult]:
+    """Measure every (protocol, workload) ``cfg.repeats`` times, interleaved round-robin so
+    slow drift (thermal throttling, cache warm-up, background load) hits all protocols alike."""
+    cells = [(p, w) for p in protos for w in ("uncontended", "hot_source")]
+    if cfg.repeats > 1 and cfg.warmup_ops > 0:
+        for p, w in cells:
+            _throughput_once(p, w, cfg, cfg.warmup_ops)  # discarded
+    runs: dict[tuple[str, str], list[ThroughputResult]] = {(p.name, w): [] for p, w in cells}
+    for _ in range(max(1, cfg.repeats)):
+        for p, w in cells:
+            runs[(p.name, w)].append(_throughput_once(p, w, cfg, cfg.ops))
+    out: list[ThroughputResult] = []
+    for p, w in cells:
+        rs = runs[(p.name, w)]
+        tps_m, tps_sd, tps_lo, tps_hi = summarize([r.tps for r in rs])
+        p50_m, _, p50_lo, p50_hi = summarize([r.p50_ms for r in rs])
+        p95_m, _, p95_lo, p95_hi = summarize([r.p95_ms for r in rs])
+        last = rs[-1]
+        many = len(rs) > 1
+        out.append(last.model_copy(update={
+            "tps": round(tps_m, 2), "p50_ms": round(p50_m, 2), "p95_ms": round(p95_m, 2),
+            "repeats": len(rs), "tps_sd": round(tps_sd, 2),
+            "settled": min(r.settled for r in rs), "not_settled": max(r.not_settled for r in rs),
+            "tps_ci95": (tps_lo, tps_hi) if many else None,
+            "p50_ci95": (p50_lo, p50_hi) if many else None,
+            "p95_ci95": (p95_lo, p95_hi) if many else None,
+            "tps_runs": [r.tps for r in rs],
+        }))
+    return out
 
 
 _CRASH_POINT = {
@@ -376,7 +440,7 @@ def run_comparison(cfg: ComparisonConfig | None = None) -> ComparisonReport:
         "Saga": SagaProtocol(urls),
     }
     protos = [available[n] for n in cfg.protocols]
-    throughput = [_throughput(p, w, cfg) for p in protos for w in ("uncontended", "hot_source")]
+    throughput = _throughput_all(protos, cfg)
     crash = [_crash(p, cfg) for p in protos]
     failure = [_failure(p, cfg) for p in protos]
     with psycopg.connect(settings.ledger1_db_url) as conn:
@@ -390,6 +454,8 @@ def run_comparison(cfg: ComparisonConfig | None = None) -> ComparisonReport:
             "python": platform.python_version(),
             "platform": platform.platform(),
             "postgres": str(pg[0]) if pg else "unknown",
+            "cpu_count": str(os.cpu_count()),
+            "machine": platform.machine(),
         },
         config=cfg,
         throughput=throughput,
