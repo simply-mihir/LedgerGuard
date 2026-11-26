@@ -888,3 +888,27 @@ def get_operator_transfer_trace(
     from ledgerguard.observability import get_trace_waterfall_for_transfer
 
     return get_trace_waterfall_for_transfer(str(transfer_id))
+
+
+@router.get("/operator/transfers/{transfer_id}/explain")
+def explain_operator_transfer(
+    transfer_id: UUID,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Return deterministic rule-based recovery explanation for a transfer."""
+    from ledgerguard.recovery_explain import explain_transfer_from_db
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    return explain_transfer_from_db(settings.coordinator_db_url, ledger_urls, transfer_id).model_dump()
+
+
+@router.get("/operator/recovery/queue")
+def get_operator_recovery_queue(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return unresolved transfers with deterministic recovery explanations."""
+    from ledgerguard.recovery_explain import list_recovery_queue_with_explanations
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    return list_recovery_queue_with_explanations(settings.coordinator_db_url, ledger_urls, limit=limit)

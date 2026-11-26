@@ -5,8 +5,8 @@
 - **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
 - **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
 - **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
-- **Current Stage:** Stage 5 — End-to-end OpenTelemetry tracing (Complete)
-- **Next Stage:** Stage 6 — Explainable recovery diagnostics
+- **Current Stage:** Stage 6 — Explainable recovery diagnostics (Complete)
+- **Next Stage:** Stage 7 — As-of-time balance reconstruction
 
 ## Stage Checklist
 
@@ -16,7 +16,7 @@
 - [x] **Stage 3:** TLA+ formal specification
 - [x] **Stage 4:** Tamper-evident audit journal
 - [x] **Stage 5:** End-to-end OpenTelemetry tracing
-- [ ] **Stage 6:** Explainable recovery diagnostics
+- [x] **Stage 6:** Explainable recovery diagnostics
 - [ ] **Stage 7:** As-of-time balance reconstruction
 - [ ] **Stage 8:** Reversals, refunds and chargebacks
 - [ ] **Stage 9:** Four-eyes approval and RBAC
@@ -59,6 +59,10 @@
 - Added OpenTelemetry tracing subsystem (`src/ledgerguard/observability/tracing.py`) supporting `none`, `console`, `otlp`, and `memory` exporters, W3C `traceparent` propagation, coarse `amount_bucket()`, and automatic sensitive-attribute redaction.
 - Instrumented HTTP middleware, coordinator transfer submission, idempotency lookup, outbox enqueue, participant `source_prepare`, forward recovery (`recovery.retry_transfer`), and cross-ledger reconciliation.
 - Added `/v1/operator/traces`, `/v1/operator/transfers/{transfer_id}/trace`, Operator Console `/console/traces` view, optional `jaeger` Compose profile, `docs/observability.md`, and `tests/test_tracing.py`.
+
+### Stage 6
+- Implemented deterministic rule-based recovery diagnostic engine (`src/ledgerguard/recovery_explain/engine.py`) covering all TCC states, partial reachability, crash-after-commit, cancellation tombstones, contradictory states, and `UNCLASSIFIED_STATE` fallback.
+- Added `/v1/operator/transfers/{transfer_id}/explain`, `/v1/operator/recovery/queue`, Operator Console `/console/recovery` view under **Operate**, `docs/recovery_explanations.md`, and `tests/test_recovery_explain.py`.
 
 ## Baseline Verification Evidence
 
