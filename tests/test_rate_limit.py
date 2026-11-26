@@ -67,6 +67,8 @@ def test_health_is_never_limited(client: TestClient) -> None:
 def test_forwarded_clients_get_their_own_bucket_only_via_trusted_proxy(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Do not depend on the environment's trusted-proxy list (.env differs between machines).
+    monkeypatch.setattr(settings, "trusted_proxies_raw", "testclient,127.0.0.1")
     for _ in range(5):
         client.get("/v1/x", headers={"X-Forwarded-For": "9.9.9.9"})
     assert client.get("/v1/x", headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 429

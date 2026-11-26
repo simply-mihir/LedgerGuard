@@ -206,10 +206,24 @@ rejection scenarios.
 
 Measured, not assumed: `scripts/run_flake_probe.sh` repeats the ten timing-sensitive test
 files three times quietly and three times with one CPU burner per core (machine load ~16 on 12
-cores). All six runs passed; no flake could be reproduced locally. Reviewing the timing
+cores). All six runs passed locally, but **CI exposed three real flakes my local runs missed** (fixed below). Reviewing the timing
 assertions found one load-sensitive upper bound (a healed proxy roundtrip must be under 150 ms);
 it now takes the fastest of five samples, which still fails if latency is still injected
 (every sample would be >= 0.28 s). Remaining probabilistic test: the SIGKILL-after-COMMIT
 scenario requires 2 of 3 kills to land inside the crash window (latency is injected to widen
 it); it passed all six runs but a very slow runner could in principle miss it. Six runs on one
 machine cannot prove CI is flake-free.
+
+CI flakes found after pushing (found in the Actions logs, not locally):
+
+* `test_random_sigkill_bursts_never_break_invariants` failed on many pushes with `worker_kills == 0`:
+  on a fast runner the 12-transfer burst finished before the random kill delay (up to 1.2 s).
+  The scenario now runs 60 transfers with 40 ms pauses, so the burst always outlasts the kill.
+* `test_proxy_forwards_traffic_transparently` raced the proxy's reply byte counter; it now waits
+  for the counter.
+* `test_forwarded_clients_get_their_own_bucket_only_via_trusted_proxy` assumed the environment's
+  trusted-proxy list contains `testclient` (`.env.example` does not); the test now sets it.
+  Reproduced locally with `LEDGERGUARD_TRUSTED_PROXIES=127.0.0.1,::1` before the fix.
+
+Lesson recorded: a clean local repeat is not evidence CI is green; check the Actions result of
+every push.

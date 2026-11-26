@@ -79,6 +79,11 @@ def _roundtrip(port: int, payload: bytes = b"ping", timeout: float = 2.0) -> byt
 def test_proxy_forwards_traffic_transparently(echo_server) -> None:
     with FaultProxy(echo_server) as proxy:
         assert _roundtrip(proxy.port, b"hello") == b"hello"
+        # The client gets the echo before the proxy's reply pump has updated its counter, so
+        # wait for the counter instead of racing it (5 bytes out + 5 bytes back = 10).
+        deadline = time.monotonic() + 5
+        while proxy.bytes_forwarded < 10 and time.monotonic() < deadline:
+            time.sleep(0.01)
         assert proxy.bytes_forwarded >= 10
 
 

@@ -183,7 +183,9 @@ def random_kill_burst(seed: int, rounds: int = 4) -> ScenarioResult:
         rng = random.Random(seed)
         kills = 0
         for _ in range(rounds):
-            w = WorkerProcess(env, count=12, pause_ms=10)
+            # The burst (60 transfers, >= 2.4 s of pauses alone) must outlast the longest kill
+            # delay (1.2 s) on any machine, so every round really kills a worker mid-burst.
+            w = WorkerProcess(env, count=60, pause_ms=40)
             try:
                 w.wait_for(lambda w=w: w.count("ready") >= 1, 30)
                 time.sleep(rng.uniform(0.15, 1.2))
