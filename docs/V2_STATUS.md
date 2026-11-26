@@ -1,0 +1,50 @@
+# LedgerGuard V2 Status
+
+- **Branch:** `feat/ledgerguard-v2`
+- **Branch Base:** `feat/operator-console-redesign` (`16db6617e10e6849fb34d7307a2519564907eaa0`)
+- **Starting SHA:** `16db6617e10e6849fb34d7307a2519564907eaa0`
+- **Origin/main SHA:** `24319b8006f64c3a84828658709212f9db9cde46`
+- **PR #1 (`feat/operator-console-redesign`):** Open (Draft) at `16db6617e10e6849fb34d7307a2519564907eaa0`
+- **Current Stage:** Stage 0 — Repository and branch preparation (Complete)
+- **Next Stage:** Stage 1 — Independent reference model and history checker
+
+## Stage Checklist
+
+- [x] **Stage 0:** Repository and branch preparation
+- [ ] **Stage 1:** Independent reference model and history checker
+- [ ] **Stage 2:** Automated chaos campaign engine
+- [ ] **Stage 3:** TLA+ formal specification
+- [ ] **Stage 4:** Tamper-evident audit journal
+- [ ] **Stage 5:** End-to-end OpenTelemetry tracing
+- [ ] **Stage 6:** Explainable recovery diagnostics
+- [ ] **Stage 7:** As-of-time balance reconstruction
+- [ ] **Stage 8:** Reversals, refunds and chargebacks
+- [ ] **Stage 9:** Four-eyes approval and RBAC
+- [ ] **Stage 10:** Concurrency and performance study
+- [ ] **Stage 11:** Adaptive backpressure and circuit breaking
+- [ ] **Stage 12:** Disaster recovery and restore verification
+
+## Completed Work
+
+### Stage 0
+- Verified clean working tree on `feat/operator-console-redesign` (`16db661`).
+- Created `feat/ledgerguard-v2` stacked on `feat/operator-console-redesign`.
+- Established `docs/V2_STATUS.md`, `docs/architecture/v2_architecture.md`, `docs/invariants.md`, and machine-readable invariant catalogue (`src/ledgerguard/domain/invariants.py`).
+- Executed full baseline verification suite prior to any V2 code changes.
+
+## Baseline Verification Evidence
+
+- `uv run ruff check .`: Passed (0 errors)
+- `uv run mypy src`: Passed (0 issues in 35 source files)
+- `uv run pytest -ra -W error`: 74 passed in 20.54s
+- `./scripts/demo_signature_recovery.sh`: Passed (8/8 steps, 0 findings)
+- `apps/console` `npm run lint`: Passed (0 errors)
+- `apps/console` `npm test`: 45 passed across 18 suites
+- `apps/console` `npm run build`: Compiled successfully (13 static/dynamic routes)
+- `python3 scripts/security_audit_scanner.py`: SCAN PASSED
+
+## Known Limitations (Baseline)
+
+- Cross-ledger transfers use application-level TCC with forward recovery; there is no global cross-database snapshot isolation.
+- V1 relies on existing `tests/test_reference_model.py` without an independent standalone history checker CLI or chaos campaign engine (addressed in Stages 1–2).
+- No formal TLA+ model, journal hash chaining, distributed tracing, or dual-control approvals exist yet (addressed in Stages 3–12).

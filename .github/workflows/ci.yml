@@ -2,9 +2,9 @@ name: LedgerGuard CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/ledgerguard-v2]
   pull_request:
-    branches: [main]
+    branches: [main, feat/operator-console-redesign]
   workflow_dispatch:
 
 permissions:
