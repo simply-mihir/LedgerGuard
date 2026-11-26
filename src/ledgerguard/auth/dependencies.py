@@ -28,33 +28,43 @@ def get_current_operator(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> OperatorPublicInfo:
-    """Authenticate incoming operator request via HttpOnly session cookie or Bearer token.
+    """Authenticate via HttpOnly session cookie or the internal service Bearer token.
 
-    Sets request.state.auth_type to 'cookie' or 'bearer', and stores csrf_token in request.state if cookie.
+    This is the single authentication path for the whole API. Sets request.state.auth_type
+    ('cookie' | 'bearer'), request.state.operator, and request.state.csrf_token (cookie only).
+    Missing or malformed credentials are 401; a well-formed but wrong bearer token is 403.
     """
     session_cookie = request.cookies.get(COOKIE_SESSION_NAME)
-
     if session_cookie:
         operator, csrf_token = validate_session(session_cookie)
         if operator:
             request.state.auth_type = "cookie"
+            request.state.operator = operator
             request.state.csrf_token = csrf_token
             return operator
 
-    # Fallback to internal service bearer token
-    if authorization:
-        parts = authorization.strip().split()
-        if len(parts) == 2 and parts[0].lower() == "bearer":
-            if secrets.compare_digest(parts[1], settings.api_bearer_token):
-                request.state.auth_type = "bearer"
-                request.state.csrf_token = None
-                return SYSTEM_OPERATOR
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Operator authentication required.",
-        headers={"WWW-Authenticate": "Bearer, Cookie"},
-    )
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Operator authentication required (missing Authorization header or session cookie).",
+            headers={"WWW-Authenticate": "Bearer, Cookie"},
+        )
+    parts = authorization.strip().split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Authorization format; expected 'Bearer <token>'",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not secrets.compare_digest(parts[1], settings.api_bearer_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or expired bearer token",
+        )
+    request.state.auth_type = "bearer"
+    request.state.operator = SYSTEM_OPERATOR
+    request.state.csrf_token = None
+    return SYSTEM_OPERATOR
 
 
 def verify_csrf_token(
@@ -98,6 +108,19 @@ def require_write_operator(
 ) -> OperatorPublicInfo:
     """Like require_operator, but rejects read-only roles (VIEWER, AUDITOR)."""
     if operator.role not in WRITE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Role {operator.role} is read-only and cannot perform this action.",
+        )
+    return operator
+
+
+def require_authenticated(
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_operator),
+) -> OperatorPublicInfo:
+    """Any authenticated operator may read; only WRITE_ROLES may use mutating methods."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and operator.role not in WRITE_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Role {operator.role} is read-only and cannot perform this action.",

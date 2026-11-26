@@ -168,3 +168,16 @@ def test_production_refuses_demo_secrets() -> None:
     )
     assert ok.env == "production"
     assert TRUSTED_ORIGIN
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "path", ["/v1/operator/overview", "/v1/operator/approvals", "/v1/operator/disputes"]
+)
+def test_single_auth_path_has_uniform_status_codes(path: str) -> None:
+    """Routes guarded by either legacy dependency now share one 401/403 contract."""
+    anon = TestClient(app)
+    assert anon.get(path).status_code == 401
+    assert anon.get(path, headers={"Authorization": "Basic abc"}).status_code == 401
+    assert anon.get(path, headers={"Authorization": "Bearer wrong"}).status_code == 403
+    assert anon.get(path, headers=AUTH).status_code == 200

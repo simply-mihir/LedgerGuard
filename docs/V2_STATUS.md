@@ -143,3 +143,5 @@
 
 - `scripts/run_protocol_comparison.py`, `scripts/run_real_fault_campaign.py` and `scripts/check_trace_conformance.py` now refuse to run on a dirty working tree (`--allow-dirty` to override) and record the full commit SHA, tree OID and `working_tree_clean` in their results (`ledgerguard.evidence`).
 - The default Docker stack no longer enables prepared transactions; the XA baseline uses the opt-in `docker-compose.xa.yml` override (used by CI).
+
+- Authentication now has a single code path (`ledgerguard.auth.dependencies.get_current_operator`); `verify_bearer_token` is a thin alias over `require_authenticated`. Status contract: 401 missing/malformed credentials, 403 wrong bearer token, CSRF/origin failures or read-only role.
