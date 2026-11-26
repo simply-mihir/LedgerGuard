@@ -13,3 +13,7 @@ VERIFY_BROKEN=1 ./scripts/run_tla_model_check.sh
 ```
 
 See [`docs/formal_verification.md`](../../docs/formal_verification.md) for abstraction boundaries, fairness assumptions, state-space bounds, and the implementation traceability table.
+
+## Concurrent multi-transfer model
+
+`LedgerGuardTCCMulti.tla` models three transfers sharing one source and one destination account (message layer abstracted). `LedgerGuardTCCMulti.cfg` must pass; `LedgerGuardTCCMulti_broken.cfg` sets `IgnoreHolds = TRUE` and must yield a `NoOverspend` counterexample. Both run from `scripts/run_tla_model_check.sh` (`VERIFY_BROKEN=1` for the defective variants). See `docs/trace_conformance.md`.

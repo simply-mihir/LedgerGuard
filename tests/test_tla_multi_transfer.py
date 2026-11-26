@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -16,10 +17,14 @@ pytestmark = pytest.mark.skipif(not tlc_available(), reason="java + tla2tools.ja
 def _tlc(cfg: str) -> tuple[int, str]:
     jar = find_jar()
     with tempfile.TemporaryDirectory(prefix="lg-multi-") as tmp:
+        work = Path(tmp)
+        # Run on a copy: TLC writes counterexample (*_TTrace_*) files next to the spec.
+        for name in ("LedgerGuardTCCMulti.tla", cfg):
+            shutil.copy(SPEC_DIR / name, work / name)
         proc = subprocess.run(
             ["java", "-XX:+UseSerialGC", "-cp", str(jar), "tlc2.TLC", "-workers", "2",
-             "-metadir", str(Path(tmp) / "states"), "-config", str(SPEC_DIR / cfg),
-             str(SPEC_DIR / "LedgerGuardTCCMulti.tla")],
+             "-metadir", str(work / "states"), "-config", str(work / cfg),
+             str(work / "LedgerGuardTCCMulti.tla")],
             capture_output=True, text=True, timeout=240, cwd=tmp,
         )
     return proc.returncode, proc.stdout + proc.stderr

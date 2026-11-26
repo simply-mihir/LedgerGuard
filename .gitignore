@@ -80,3 +80,7 @@ artifacts/
 
 # Git Bundles & Archives
 *.bundle
+
+# TLC counterexample traces and state dirs
+formal/tla/*_TTrace_*
+formal/tla/states*/
