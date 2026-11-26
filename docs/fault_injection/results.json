@@ -4,8 +4,9 @@
     "postgres": "17.11",
     "python": "3.12.13"
   },
-  "generated_at": "2026-11-26T10:25:52+00:00",
-  "git_sha": "4be92b359f835ee169d4d00baa01f8078578330a",
+  "generated_at": "2026-11-26T10:56:04+00:00",
+  "git_sha": "f4974d5fbfb4f5332594f5395577b2c7f6c82005",
+  "git_tree": "99b1d2bf9fbb15de4a242b14cbfbd716cc5d4933",
   "scenarios": [
     {
       "cancelled": 0,
@@ -64,8 +65,8 @@
         }
       ],
       "name": "SIGKILL after durable COMMIT",
-      "recovered_by_recovery_loop": 5,
-      "seconds": 17.17,
+      "recovered_by_recovery_loop": 4,
+      "seconds": 21.27,
       "settled": 4,
       "transfers": 4
     },
@@ -79,7 +80,7 @@
       ],
       "invariants": [
         {
-          "detail": "13 transfers, 0 not terminal",
+          "detail": "15 transfers, 0 not terminal",
           "name": "all_transfers_terminal",
           "passed": true
         },
@@ -99,12 +100,12 @@
           "passed": true
         },
         {
-          "detail": "13 transfers checked",
+          "detail": "15 transfers checked",
           "name": "single_settlement_per_transfer",
           "passed": true
         },
         {
-          "detail": "13 decisions, 0 inconsistent",
+          "detail": "15 decisions, 0 inconsistent",
           "name": "decision_never_reverted",
           "passed": true
         },
@@ -125,10 +126,10 @@
         }
       ],
       "name": "Random SIGKILL burst",
-      "recovered_by_recovery_loop": 2,
-      "seconds": 13.12,
-      "settled": 13,
-      "transfers": 13
+      "recovered_by_recovery_loop": 4,
+      "seconds": 13.42,
+      "settled": 15,
+      "transfers": 15
     },
     {
       "cancelled": 0,
@@ -189,7 +190,7 @@
       ],
       "name": "Network latency",
       "recovered_by_recovery_loop": 0,
-      "seconds": 40.89,
+      "seconds": 44.04,
       "settled": 8,
       "transfers": 8
     },
@@ -252,15 +253,15 @@
       ],
       "name": "Partition of destination ledger",
       "recovered_by_recovery_loop": 1,
-      "seconds": 12.33,
+      "seconds": 15.07,
       "settled": 3,
       "transfers": 3
     },
     {
       "cancelled": 0,
       "facts": {
-        "connections_reset": 18,
-        "worker_errors": 9
+        "connections_reset": 30,
+        "worker_errors": 12
       },
       "faults": [
         "RST on live connections, random link"
@@ -313,16 +314,16 @@
         }
       ],
       "name": "TCP reset storm",
-      "recovered_by_recovery_loop": 3,
-      "seconds": 8.66,
+      "recovered_by_recovery_loop": 6,
+      "seconds": 11.7,
       "settled": 6,
       "transfers": 6
     },
     {
       "cancelled": 0,
       "facts": {
-        "acked_before_crash": 19,
-        "unacked_replayed": 11
+        "acked_before_crash": 18,
+        "unacked_replayed": 12
       },
       "faults": [
         "kill -9 API mid-burst",
@@ -345,7 +346,7 @@
           "passed": true
         },
         {
-          "detail": "19 acks before the crash all match after restart",
+          "detail": "18 acks before the crash all match after restart",
           "name": "acknowledged_transfers_preserved",
           "passed": true
         },
@@ -357,7 +358,7 @@
       ],
       "name": "API SIGKILL + idempotent replay",
       "recovered_by_recovery_loop": 0,
-      "seconds": 4.06,
+      "seconds": 4.22,
       "settled": 30,
       "transfers": 30
     },
@@ -420,7 +421,7 @@
       ],
       "name": "PostgreSQL SIGKILL (postgres-ledger2)",
       "recovered_by_recovery_loop": 3,
-      "seconds": 12.53,
+      "seconds": 16.07,
       "settled": 12,
       "transfers": 12
     },
@@ -483,11 +484,12 @@
       ],
       "name": "PostgreSQL SIGKILL (postgres-coordinator)",
       "recovered_by_recovery_loop": 1,
-      "seconds": 15.5,
+      "seconds": 18.1,
       "settled": 10,
       "transfers": 10
     }
   ],
   "schema_version": 1,
-  "seed": 42
+  "seed": 42,
+  "working_tree_clean": true
 }
