@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
 import pytest
 
-from ledgerguard.perf import ALL_PROFILES, run_perf_study, write_study_artifacts
+from ledgerguard.perf import ALL_PROFILES, ProfileResult, run_perf_study, write_study_artifacts
 
 
 @pytest.mark.integration
@@ -25,6 +26,18 @@ def test_perf_study_smoke_generates_raw_and_markdown_artifacts(tmp_path: Path) -
     assert paths["csv"].exists()
     assert paths["svg"].exists()
     assert paths["md"].exists()
+
+    # Verify LF-only line endings and zero trailing whitespace (Fix 2)
+    csv_bytes = paths["csv"].read_bytes()
+    assert b"\r\n" not in csv_bytes
+    assert b"\r" not in csv_bytes
+    assert csv_bytes.endswith(b"\n")
+
+    with paths["csv"].open("r", encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        assert reader.fieldnames == list(ProfileResult.model_fields.keys())
+        rows = list(reader)
+        assert len(rows) == 8
 
     raw = json.loads(paths["json"].read_text(encoding="utf-8"))
     assert len(raw["results"]) == 8

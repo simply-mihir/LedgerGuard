@@ -5,6 +5,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from ledgerguard.db.pool import get_db_connection
+from ledgerguard.db.retry import run_with_transient_retry
 from ledgerguard.domain.idempotency import (
     IdempotencyConflictError,
     compute_payload_hash,
@@ -74,6 +75,34 @@ def execute_local_transfer(
     payload_hash = compute_payload_hash(payload_dict)
     op_namespace = "local_transfer"
 
+    return run_with_transient_retry(
+        lambda: _execute_local_transfer_tx(
+            db_url=db_url,
+            idempotency_key=idempotency_key,
+            source_account_id=source_account_id,
+            destination_account_id=destination_account_id,
+            amount=amount,
+            correlation_id=correlation_id,
+            description=description,
+            payload_hash=payload_hash,
+            op_namespace=op_namespace,
+        ),
+        operation_name="LOCAL_TRANSFER",
+    )
+
+
+def _execute_local_transfer_tx(
+    *,
+    db_url: str,
+    idempotency_key: str,
+    source_account_id: UUID,
+    destination_account_id: UUID,
+    amount: AmountPaise,
+    correlation_id: str | None,
+    description: str | None,
+    payload_hash: str,
+    op_namespace: str,
+) -> dict[str, Any]:
     with get_db_connection(db_url) as conn:
         cur: Any
         with conn.cursor(row_factory=dict_row) as cur:

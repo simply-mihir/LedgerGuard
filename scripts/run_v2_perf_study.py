@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--smoke", action="store_true", help="Run fast bounded smoke study across all 12 profiles")
     parser.add_argument("--ops", type=int, default=12)
+    parser.add_argument("--opposite-ops", type=int, default=100, help="Measured ops for opposite_direction contention profile")
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--out-dir", default="docs/performance")
     args = parser.parse_args()
@@ -26,6 +27,7 @@ def main() -> None:
         worker_levels=workers,
         warmup_ops=args.warmup,
         measured_ops=ops,
+        per_profile_ops={"opposite_direction": args.opposite_ops},
     )
     paths = write_study_artifacts(report, Path(args.out_dir))
     print(f"Generated {len(report.results)} benchmark rows -> {paths['md']}")

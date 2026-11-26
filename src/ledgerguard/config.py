@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     worker_batch_size: int = Field(default=20, alias="WORKER_BATCH_SIZE")
     worker_lock_timeout_seconds: int = Field(default=10, alias="WORKER_LOCK_TIMEOUT_SECONDS")
 
+    # Transient PostgreSQL Concurrency Retry (40P01 / 40001)
+    db_transient_max_retries: int = Field(default=3, ge=0, le=10, alias="DB_TRANSIENT_MAX_RETRIES")
+    db_transient_base_backoff_ms: float = Field(default=10.0, ge=1.0, le=1000.0, alias="DB_TRANSIENT_BASE_BACKOFF_MS")
+    db_transient_max_backoff_ms: float = Field(default=250.0, ge=10.0, le=5000.0, alias="DB_TRANSIENT_MAX_BACKOFF_MS")
+
     # Observability / OpenTelemetry
     otel_exporter: Literal["none", "console", "otlp", "memory"] = Field(
         default="memory", alias="LEDGERGUARD_OTEL_EXPORTER"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -37,6 +38,7 @@ _SENSITIVE_KEYWORDS = (
 _PROPAGATOR = TraceContextTextMapPropagator()
 _MEMORY_EXPORTER: InMemorySpanExporter | None = None
 _PROVIDER_INITIALIZED = False
+_PROVIDER_LOCK = threading.Lock()
 
 
 def amount_bucket(amount_minor: int) -> str:
@@ -79,31 +81,30 @@ def configure_tracing(mode: str | None = None) -> InMemorySpanExporter | None:
     if selected == "none":
         return None
 
-    if _PROVIDER_INITIALIZED:
-        if selected == "memory" and _MEMORY_EXPORTER is not None:
+    with _PROVIDER_LOCK:
+        if _PROVIDER_INITIALIZED:
             return _MEMORY_EXPORTER
+
+        resource = Resource.create({"service.name": "ledgerguard", "deployment.environment": settings.env})
+        provider = TracerProvider(resource=resource)
+
+        exporter: SpanExporter | None = None
+        if selected == "memory":
+            _MEMORY_EXPORTER = InMemorySpanExporter()
+            exporter = _MEMORY_EXPORTER
+        elif selected == "console":
+            exporter = ConsoleSpanExporter()
+        elif selected == "otlp":
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+            exporter = OTLPSpanExporter(endpoint=settings.otel_endpoint)
+
+        if exporter is not None:
+            provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        trace.set_tracer_provider(provider)
+        _PROVIDER_INITIALIZED = True
         return _MEMORY_EXPORTER
-
-    resource = Resource.create({"service.name": "ledgerguard", "deployment.environment": settings.env})
-    provider = TracerProvider(resource=resource)
-
-    exporter: SpanExporter | None = None
-    if selected == "memory":
-        _MEMORY_EXPORTER = InMemorySpanExporter()
-        exporter = _MEMORY_EXPORTER
-    elif selected == "console":
-        exporter = ConsoleSpanExporter()
-    elif selected == "otlp":
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
-        exporter = OTLPSpanExporter(endpoint=settings.otel_endpoint)
-
-    if exporter is not None:
-        provider.add_span_processor(SimpleSpanProcessor(exporter))
-
-    trace.set_tracer_provider(provider)
-    _PROVIDER_INITIALIZED = True
-    return _MEMORY_EXPORTER
 
 
 def get_in_memory_exporter() -> InMemorySpanExporter | None:
