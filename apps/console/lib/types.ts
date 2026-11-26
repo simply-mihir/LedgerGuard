@@ -9,7 +9,7 @@ export interface OperatorPublicInfo {
   operator_id: string;
   username: string;
   email: string;
-  role: 'OPERATOR' | 'ADMIN' | 'AUDITOR';
+  role: 'VIEWER' | 'OPERATOR' | 'APPROVER' | 'AUDITOR' | 'ADMIN';
   totp_enabled: boolean;
 }
 

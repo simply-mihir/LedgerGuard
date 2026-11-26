@@ -3,9 +3,11 @@
 import React, { useState } from 'react';
 import { ReconciliationReport } from '../../../lib/types';
 import { executeReconciliation } from '../../../lib/api';
+import { useAuth } from '../../../lib/auth-context';
 import { formatINR, formatNumber } from '../../../lib/format';
 
 export default function ReconciliationPage() {
+  const { csrfToken } = useAuth();
   const [report, setReport] = useState<ReconciliationReport | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +16,7 @@ export default function ReconciliationPage() {
     setIsRunning(true);
     setError(null);
     try {
-      const result = await executeReconciliation();
+      const result = await executeReconciliation(csrfToken);
       setReport(result);
     } catch (err: any) {
       setError(err.message || 'Failed to execute reconciliation audit');

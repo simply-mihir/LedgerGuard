@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { ExperimentResult } from '../../../lib/types';
 import { executeExperiment } from '../../../lib/api';
+import { useAuth } from '../../../lib/auth-context';
 
 export default function ExperimentsPage() {
+  const { csrfToken } = useAuth();
   const [result, setResult] = useState<ExperimentResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +16,7 @@ export default function ExperimentsPage() {
     setIsRunning(true);
     setError(null);
     try {
-      const res = await executeExperiment('SIGNATURE_RECOVERY');
+      const res = await executeExperiment('SIGNATURE_RECOVERY', csrfToken);
       setResult(res);
     } catch (err: any) {
       setError(err.message || 'Failed to execute experiment scenario');

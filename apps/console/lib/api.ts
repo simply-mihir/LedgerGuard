@@ -12,7 +12,6 @@ import {
   TransferItem,
   WorkflowEvent,
 } from './types';
-import { DEMO_OPERATOR_AUTH_HEADER } from './constants';
 
 export class ApiError extends Error {
   status: number;
@@ -21,6 +20,18 @@ export class ApiError extends Error {
     this.status = status;
     this.name = 'ApiError';
   }
+}
+
+/**
+ * Build headers for state-changing requests. Authentication is the HttpOnly
+ * session cookie; the backend requires the session's CSRF token on mutations.
+ * No static credential is ever bundled into the client.
+ */
+export function csrfHeaders(
+  csrfToken: string | null,
+  extra: Record<string, string> = {}
+): Record<string, string> {
+  return csrfToken ? { ...extra, 'X-CSRF-Token': csrfToken } : { ...extra };
 }
 
 /**
@@ -99,12 +110,12 @@ export async function getTransferTimeline(transferId: string): Promise<WorkflowE
  * Execute an on-demand double-entry reconciliation audit.
  * Returns exact fields from ReconciliationRunResponse without synthetic fields.
  */
-export async function executeReconciliation(): Promise<ReconciliationReport> {
+export async function executeReconciliation(
+  csrfToken: string | null
+): Promise<ReconciliationReport> {
   const res = await fetch('/api/admin/reconciliation-runs', {
     method: 'POST',
-    headers: {
-      Authorization: DEMO_OPERATOR_AUTH_HEADER,
-    },
+    headers: csrfHeaders(csrfToken),
     cache: 'no-store',
   });
 
@@ -138,13 +149,13 @@ export async function executeReconciliation(): Promise<ReconciliationReport> {
 /**
  * Execute a named deterministic fault injection and recovery scenario.
  */
-export async function executeExperiment(scenario: string): Promise<ExperimentResult> {
+export async function executeExperiment(
+  scenario: string,
+  csrfToken: string | null
+): Promise<ExperimentResult> {
   const res = await fetch('/api/operator/experiments/run', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: DEMO_OPERATOR_AUTH_HEADER,
-    },
+    headers: csrfHeaders(csrfToken, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ scenario }),
     cache: 'no-store',
   });

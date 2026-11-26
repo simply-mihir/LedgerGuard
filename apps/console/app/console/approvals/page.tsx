@@ -44,13 +44,13 @@ export default function ApprovalsPage() {
         action === 'approve'
           ? {
               approver_id: operator?.username || 'approver',
-              approver_role: operator?.role || 'ADMIN',
+              approver_role: operator?.role ?? 'VIEWER',
               mfa_verified: operator?.totp_enabled ?? false,
               auth_age_seconds: 0,
             }
           : {
               actor_id: operator?.username || 'approver',
-              actor_role: operator?.role || 'ADMIN',
+              actor_role: operator?.role ?? 'VIEWER',
             }
       ),
     });

@@ -4,8 +4,6 @@
 
 export const REFRESH_INTERVAL_MS = 10000;
 
-export const DEMO_OPERATOR_AUTH_HEADER = 'Bearer ledgerguard_operator_demo_token';
-
 export const CLUSTER_NODES = [
   {
     id: 'coordinator',
