@@ -113,3 +113,8 @@
 - Cross-ledger transfers use application-level TCC with forward recovery; there is no global cross-database snapshot isolation.
 - V1 relies on existing `tests/test_reference_model.py` without an independent standalone history checker CLI or chaos campaign engine (addressed in Stages 1–2).
 - No formal TLA+ model, journal hash chaining, distributed tracing, or dual-control approvals exist yet (addressed in Stages 3–12).
+
+## Post-V2 Evaluation: Protocol Comparison
+
+- Added `src/ledgerguard/comparison/` (TCC vs XA two-phase commit vs Saga on the same accounting kernel and real PostgreSQL 17), `scripts/run_protocol_comparison.py`, `tests/test_protocol_comparison.py`, `docs/protocol_comparison.md`, and committed evidence in `docs/comparison/`.
+- `docker-compose.yml` now starts the ledger databases with `max_prepared_transactions=64` (required by the XA baseline only; LedgerGuard itself never uses prepared transactions).

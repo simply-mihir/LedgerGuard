@@ -1,0 +1,166 @@
+{
+  "config": {
+    "amount_minor": 1000,
+    "bystander_timeout_ms": 1500,
+    "funding_minor": 5000000,
+    "ops": 48,
+    "protocols": [
+      "TCC",
+      "XA-2PC",
+      "Saga"
+    ],
+    "workers": 4
+  },
+  "crash": [
+    {
+      "bystander_state": "SETTLED",
+      "bystander_wait_ms": 49.3,
+      "clearing_delta_after": 0,
+      "crash_point": "after durable COMMIT decision, before confirms",
+      "customer_funds_delta_after": 0,
+      "customer_funds_delta_in_window": 0,
+      "outcome_at_crash": "IN_DOUBT",
+      "partial_posting_visible": false,
+      "protocol": "TCC",
+      "recovery_ms": 26.4,
+      "resources_pinned_in_window": "1000 paise held as rows (no row locks held)",
+      "unresolved_after": 0
+    },
+    {
+      "bystander_state": "BLOCKED",
+      "bystander_wait_ms": 1507.3,
+      "clearing_delta_after": 0,
+      "crash_point": "both legs PREPARED, before COMMIT PREPARED",
+      "customer_funds_delta_after": 0,
+      "customer_funds_delta_in_window": 0,
+      "outcome_at_crash": "IN_DOUBT",
+      "partial_posting_visible": false,
+      "protocol": "XA-2PC",
+      "recovery_ms": 88.2,
+      "resources_pinned_in_window": "2 prepared txns holding row locks on both ledgers",
+      "unresolved_after": 0
+    },
+    {
+      "bystander_state": "SETTLED",
+      "bystander_wait_ms": 33.6,
+      "clearing_delta_after": 0,
+      "crash_point": "after step 1 (source debited), before step 2",
+      "customer_funds_delta_after": 0,
+      "customer_funds_delta_in_window": -1000,
+      "outcome_at_crash": "IN_DOUBT",
+      "partial_posting_visible": true,
+      "protocol": "Saga",
+      "recovery_ms": 7.6,
+      "resources_pinned_in_window": "none (source already debited and committed)",
+      "unresolved_after": 0
+    }
+  ],
+  "environment": {
+    "platform": "macOS-26.7.3-x86_64-i386-64bit",
+    "postgres": "17.11",
+    "python": "3.12.13"
+  },
+  "failure": [
+    {
+      "atomic": true,
+      "clearing_delta": 0,
+      "customer_funds_delta": 0,
+      "final_state": "CANCELLED",
+      "journals_written": 0,
+      "protocol": "TCC"
+    },
+    {
+      "atomic": true,
+      "clearing_delta": 0,
+      "customer_funds_delta": 0,
+      "final_state": "CANCELLED",
+      "journals_written": 0,
+      "protocol": "XA-2PC"
+    },
+    {
+      "atomic": true,
+      "clearing_delta": 0,
+      "customer_funds_delta": 0,
+      "final_state": "CANCELLED",
+      "journals_written": 2,
+      "protocol": "Saga"
+    }
+  ],
+  "generated_at": "2026-11-26T09:42:33+00:00",
+  "git_sha": "5e09349b1abab41552b1f568075448b3dfbd0238",
+  "schema_version": 1,
+  "throughput": [
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ms": 92.91,
+      "p95_ms": 133.55,
+      "protocol": "TCC",
+      "seconds": 1.195,
+      "settled": 48,
+      "tps": 40.16,
+      "workers": 4,
+      "workload": "uncontended"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ms": 94.76,
+      "p95_ms": 119.08,
+      "protocol": "TCC",
+      "seconds": 1.179,
+      "settled": 48,
+      "tps": 40.72,
+      "workers": 4,
+      "workload": "hot_source"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ms": 28.21,
+      "p95_ms": 85.42,
+      "protocol": "XA-2PC",
+      "seconds": 0.441,
+      "settled": 48,
+      "tps": 108.76,
+      "workers": 4,
+      "workload": "uncontended"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ms": 34.06,
+      "p95_ms": 90.38,
+      "protocol": "XA-2PC",
+      "seconds": 0.538,
+      "settled": 48,
+      "tps": 89.19,
+      "workers": 4,
+      "workload": "hot_source"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ms": 15.06,
+      "p95_ms": 16.95,
+      "protocol": "Saga",
+      "seconds": 0.19,
+      "settled": 48,
+      "tps": 252.62,
+      "workers": 4,
+      "workload": "uncontended"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ms": 14.73,
+      "p95_ms": 22.08,
+      "protocol": "Saga",
+      "seconds": 0.2,
+      "settled": 48,
+      "tps": 239.71,
+      "workers": 4,
+      "workload": "hot_source"
+    }
+  ]
+}

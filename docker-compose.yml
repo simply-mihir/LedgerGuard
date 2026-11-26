@@ -21,6 +21,8 @@ services:
   postgres-ledger1:
     image: postgres:17-alpine
     restart: unless-stopped
+    # Enables PREPARE TRANSACTION so the XA/2PC comparison baseline can run.
+    command: ["postgres", "-c", "max_prepared_transactions=64"]
     environment:
       POSTGRES_DB: ledger1_db
       POSTGRES_USER: ledgerguard_admin
@@ -40,6 +42,8 @@ services:
   postgres-ledger2:
     image: postgres:17-alpine
     restart: unless-stopped
+    # Enables PREPARE TRANSACTION so the XA/2PC comparison baseline can run.
+    command: ["postgres", "-c", "max_prepared_transactions=64"]
     environment:
       POSTGRES_DB: ledger2_db
       POSTGRES_USER: ledgerguard_admin
