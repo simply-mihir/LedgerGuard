@@ -54,7 +54,7 @@ Committed evidence: [`docs/comparison/results.md`](comparison/results.md) and
 
 | Property | TCC | XA-2PC | Saga |
 |---|---|---|---|
-| Happy-path throughput (4 workers) | ~40 TPS | ~90-110 TPS | ~240-250 TPS |
+| Happy-path throughput (4 workers) | ~40 TPS | ~75-95 TPS | ~230-280 TPS |
 | Row locks pinned while coordinator is down | **none** (a hold is an ordinary row) | **yes** (prepared txns on both ledgers) | none |
 | Unrelated transfer on the same source during the outage | **succeeds (~50 ms)** | **blocked** until lock timeout (1.5 s here; unbounded without one) | succeeds |
 | Partially applied transfer visible in posted balances | **no** | no | **yes** (source already debited) |
