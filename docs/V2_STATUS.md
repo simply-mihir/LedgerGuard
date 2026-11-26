@@ -152,3 +152,9 @@
 - Service identities are bound server-side for audit actors and approvals; a service credential has no MFA and so can never approve. Malformed credential configuration fails at startup.
 - The shared demo token (`API_BEARER_TOKEN`) is accepted only outside production.
 - Tests: `tests/test_api_authorization.py`.
+
+## Post-V2 Hardening: Dependency Audit
+
+- `npm audit` (including dev tooling): 6 moderate findings (minimatch DoS reachable only through the ESLint toolchain) fixed with `npm audit fix` (lockfile only); now 0. `pip-audit` over the full `uv.lock` set (runtime + dev extras): 0 known vulnerabilities.
+- CI now audits dev dependencies too (`npm audit` without `--omit=dev`; `uv export --all-extras` for `pip-audit`), so a vulnerable dev tool fails the build.
+- Scope: this checks known advisories only; it is not a substitute for a third-party penetration test.

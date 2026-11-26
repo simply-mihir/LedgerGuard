@@ -86,9 +86,9 @@ jobs:
       - name: Verify tamper-evident journal hash chains
         run: uv run python -m ledgerguard.cli verify-all-ledgers
 
-      - name: Audit Python production dependencies
+      - name: Audit Python dependencies (runtime and dev tooling)
         run: |
-          uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/ledgerguard-production-requirements.txt
+          uv export --frozen --all-extras --no-hashes --no-emit-project -o /tmp/ledgerguard-production-requirements.txt
           uvx pip-audit -r /tmp/ledgerguard-production-requirements.txt
 
       - name: Report container status on failure
@@ -126,7 +126,7 @@ jobs:
           npm run lint
           npm test
           npm run build
-          npm audit --omit=dev
+          npm audit
 
   e2e:
     name: Real Browser E2E & Rendered Accessibility Tests
