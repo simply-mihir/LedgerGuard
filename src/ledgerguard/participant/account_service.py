@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg.rows import dict_row
 
+from ledgerguard.db.errors import is_infrastructure_error
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.models import (
     AccountBalanceView,
@@ -191,6 +192,8 @@ def set_account_status(
             conn.commit()
         except psycopg.Error as exc:
             conn.rollback()
+            if is_infrastructure_error(exc):
+                raise
             msg = str(exc)
             if "not found" in msg:
                 raise AccountNotFoundError(f"Account {account_id} not found.") from exc

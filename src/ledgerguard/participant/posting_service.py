@@ -4,10 +4,10 @@ import json
 from typing import Any
 from uuid import UUID, uuid4
 
-import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from ledgerguard.db.errors import is_infrastructure_error
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.constants import SYSTEM_CASH_ACCOUNT_ID
 from ledgerguard.domain.models import (
@@ -86,8 +86,10 @@ def post_journal_entry(db_url: str, request: JournalPostRequest) -> dict[str, An
                 result = row["result"] if row else {}
             conn.commit()
             return result if isinstance(result, dict) else json.loads(result)
-        except (psycopg.Error, Exception) as exc:
+        except Exception as exc:
             conn.rollback()
+            if is_infrastructure_error(exc):
+                raise  # disk full, shutdown, lock timeout...: not a statement about the request
             raise PostingError(f"Posting failed: {exc}") from exc
 
 

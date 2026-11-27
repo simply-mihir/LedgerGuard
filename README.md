@@ -369,7 +369,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 297 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 325 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
 - **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
@@ -444,6 +444,9 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_row_level_security.py`](tests/test_row_level_security.py) | 12 | A customer-scoped session sees only its own accounts, balances, journal lines and headers; counterparty lines are hidden on shared journals; unset/empty/unknown scope returns nothing and a malformed one errors; the role is read-only, NOLOGIN and confined to five tables; scope does not outlive the transaction; `ledgerguard_app` and `ledgerguard_reporter` are unchanged; the documented self-rescope limit. |
 | [`tests/test_query_plans.py`](tests/test_query_plans.py) | 29 | 18 hot queries planned at volume must use their intended index with no sequential scan; the catalogued SQL still exists in source; dropping each added index degrades to a sequential scan; no redundant indexes in any database; the redundant-index detector flags duplicates and prefixes. |
 | [`tests/test_journal_partitioning.py`](tests/test_journal_partitioning.py) | 6 | Why native journal partitioning is not enabled: PostgreSQL refuses the real unique keys on a partitioned header, the accepted layout loses global uniqueness, hash-partitioned lines fan out on `journal_id` lookups, partition drop bypasses the immutability triggers; and the real journals stay unpartitioned. |
+| [`tests/test_clock_faults.py`](tests/test_clock_faults.py) | 4 | Outbox lease and retry delay are measured on the database clock; the module reads no process clock; a control shows the old slow-clock duplicate-delivery failure. |
+| [`tests/test_disk_full.py`](tests/test_disk_full.py) | 1 | A throwaway Postgres with a 16 MB data tablespace is filled; postings fail with 53100 and roll back, reconciliation and the hash chain still pass, and posting resumes after space is freed. Skips without Docker. |
+| [`tests/test_infrastructure_errors.py`](tests/test_infrastructure_errors.py) | 23 | Infrastructure failures (disk full, shutdown, lost connection, lock timeout) are classified, propagate unwrapped from posting, and return 503 without detail; business rejections stay 4xx. |
 | [`tests/test_idempotent_transfer_race.py`](tests/test_idempotent_transfer_race.py) | 5 | Eight concurrent submits with one idempotency key settle exactly one transfer (single debit/credit, identical receipts, reconciliation and hash chains pass); replay returns the same receipt; a changed payload is a conflict; the database itself rejects a second transfer row for a claimed key. |
 | [`tests/test_benchmark_stats.py`](tests/test_benchmark_stats.py) | 4 | Confidence-interval and distinguishability helpers for the benchmarks. |
 | [`tests/test_protocol_comparison.py`](tests/test_protocol_comparison.py) | 6 | TCC vs XA two-phase commit vs Saga on real PostgreSQL: crash windows, atomicity, bystander blocking. |
@@ -457,7 +460,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
 | [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **299** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **327** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 

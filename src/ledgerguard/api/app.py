@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from ledgerguard.api.auth_routes import auth_router
 from ledgerguard.api.rate_limit import RateLimitMiddleware
 from ledgerguard.api.routes import router
+from ledgerguard.db.errors import is_infrastructure_error
 from ledgerguard.db.pool import close_all_pools
 from ledgerguard.db.retry import TransientRetryExhaustedError
 from ledgerguard.observability import extract_trace_context, inject_trace_carrier, safe_span
@@ -71,6 +72,21 @@ def create_app() -> FastAPI:
             {"detail": "The ledger database is busy. Retry shortly."},
             status_code=503,
             headers={"Retry-After": "1"},
+        )
+
+    @app.exception_handler(psycopg.OperationalError)
+    async def database_unavailable_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Disk full, out of memory, connection limits, shutdown or a lost connection.
+
+        The request was not judged invalid and nothing was committed by the failed transaction,
+        so the client may retry with the same idempotency key. No server detail is returned.
+        """
+        if not is_infrastructure_error(exc):
+            raise exc  # a business rejection that escaped its service layer stays a 500
+        return JSONResponse(
+            {"detail": "The ledger database is temporarily unavailable. Retry later."},
+            status_code=503,
+            headers={"Retry-After": "5"},
         )
 
     @app.get("/health", tags=["System"])

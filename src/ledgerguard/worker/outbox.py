@@ -1,6 +1,5 @@
 """PostgreSQL transactional outbox claim and delivery tracking."""
 
-from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -46,9 +45,10 @@ def claim_pending_outbox_events(
     aggregate_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
     """Claim pending outbox events using FOR UPDATE SKIP LOCKED."""
-    now = datetime.now(UTC)
-    lease_until = now + timedelta(seconds=lock_duration_seconds)
-
+    # The lease is computed by the database (``NOW() + interval``), the same clock that
+    # ``next_attempt_at <= NOW()`` is evaluated against. Using this process's wall clock here would
+    # let an app/DB clock difference turn a lease into an instant expiry (duplicate delivery) or a
+    # long stall.
     with get_db_connection(db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             if aggregate_id:
@@ -83,10 +83,10 @@ def claim_pending_outbox_events(
                     f"""
                     UPDATE {table_name}
                     SET attempts = attempts + 1,
-                        next_attempt_at = %s
+                        next_attempt_at = NOW() + make_interval(secs => %s)
                     WHERE outbox_id = ANY(%s);
                 """,
-                    (lease_until, event_ids),
+                    (lock_duration_seconds, event_ids),
                 )
         conn.commit()
 
@@ -119,15 +119,14 @@ def mark_outbox_failed(
     table_name: str = "outbox_events",
 ) -> None:
     """Reschedule an outbox event for retry after a backoff delay."""
-    retry_at = datetime.now(UTC) + timedelta(seconds=retry_delay_seconds)
     with get_db_connection(db_url) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
                 UPDATE {table_name}
-                SET next_attempt_at = %s
+                SET next_attempt_at = NOW() + make_interval(secs => %s)
                 WHERE outbox_id = %s;
             """,
-                (retry_at, outbox_id),
+                (retry_delay_seconds, outbox_id),
             )
         conn.commit()
