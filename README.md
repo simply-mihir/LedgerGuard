@@ -369,7 +369,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 230 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 236 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
 - **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
@@ -439,6 +439,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_opposite_direction_concurrency.py`](tests/test_opposite_direction_concurrency.py) | 2 | Opposite-direction transfers on shared accounts (deadlock-free lock ordering). |
 | [`tests/test_perf_study.py`](tests/test_perf_study.py) | 8 | Concurrency and performance study harness and provenance. |
 | [`tests/test_rate_limit.py`](tests/test_rate_limit.py) | 8 | Token-bucket maths, 429 + Retry-After, separate write bucket, trusted-proxy client keys, bounded memory. |
+| [`tests/test_isolation_study.py`](tests/test_isolation_study.py) | 6 | Deterministic two-session reproduction of lost update, write skew, non-repeatable read and phantom at READ COMMITTED / REPEATABLE READ / SERIALIZABLE, plus the real `post_journal` under concurrent overdraft at all three levels. |
 | [`tests/test_benchmark_stats.py`](tests/test_benchmark_stats.py) | 4 | Confidence-interval and distinguishability helpers for the benchmarks. |
 | [`tests/test_protocol_comparison.py`](tests/test_protocol_comparison.py) | 6 | TCC vs XA two-phase commit vs Saga on real PostgreSQL: crash windows, atomicity, bystander blocking. |
 | [`tests/test_real_fault_injection.py`](tests/test_real_fault_injection.py) | 21 | SIGKILL of worker/API/PostgreSQL, TCP latency/partition/reset/corruption/reorder/truncation proxy, post-recovery invariants (container scenarios opt-in). |
@@ -451,7 +452,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
 | [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **232** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **238** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 

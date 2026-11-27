@@ -227,3 +227,8 @@ CI flakes found after pushing (found in the Actions logs, not locally):
 
 Lesson recorded: a clean local repeat is not evidence CI is green; check the Actions result of
 every push.
+
+### Gap: isolation levels were never studied
+- Added `src/ledgerguard/isolation/study.py`: deterministic two-session reproduction of lost update, write skew, non-repeatable read and phantom at READ COMMITTED, REPEATABLE READ and SERIALIZABLE, with each mitigation, plus the real `post_journal` under concurrent overdraft at all three levels.
+- Finding: the kernel's ordered `FOR UPDATE` locking keeps the invariant at every level and needs zero retries at READ COMMITTED; REPEATABLE READ does not prevent write skew. No production code changed.
+- Evidence in `docs/isolation/`, write-up in `docs/isolation_study.md`, `tests/test_isolation_study.py` (6 tests).
