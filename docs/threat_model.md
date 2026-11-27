@@ -5,6 +5,7 @@
 - Session tokens stored as SHA-256 digests (`session_token_hash`); cookies use `HttpOnly`, `SameSite=Lax`, and `Secure` outside local dev.
 - CSRF tokens and trusted-origin checks protect all state-changing routes.
 - `ledgerguard_reporter` is strictly denied access to `operators`, `operator_sessions`, and `operator_login_attempts` (Invariant `I16`).
+- Customer-scoped reads can be confined by PostgreSQL row-level security (`ledgerguard_customer_reader`, see `docs/row_level_security.md`); it protects against query-layer bugs and injection, not against a malicious holder of that role, and is not yet wired into any endpoint.
 
 ## 2. Tamper-Evident Journals & Snapshots
 - `journal_headers` and `journal_lines` reject `UPDATE`/`DELETE`/`TRUNCATE` via triggers.

@@ -237,3 +237,8 @@ every push.
 - Every pooled connection now sets `lock_timeout` (5 s), `statement_timeout` (60 s) and `idle_in_transaction_session_timeout` (60 s); each is configurable and `0` disables it.
 - `55P03` (lock timeout) is classified as transient and retried across the whole local transaction; `57014` (statement timeout) is deliberately not retried. The API maps both, and exhausted retries, to `503` + `Retry-After` with no query detail.
 - `tests/test_db_timeouts.py` (9 tests); `docs/deployment.md` explains tuning. Not verified: behaviour of the limits under production-scale load.
+
+### Gap: no database-enforced row isolation
+- Forward migration `migrations/ledger/010_row_level_security.sql` adds the NOLOGIN `ledgerguard_customer_reader` role with row-level security on `ledger_accounts`, `account_balances`, `journal_headers`, `journal_lines` and `balance_snapshots`, scoped per transaction to one customer and failing closed. `ledgerguard_app` and `ledgerguard_reporter` keep unrestricted policies; RLS is enabled but not forced, so `post_journal` and chain verification are unchanged.
+- `src/ledgerguard/db/customer_scope.py` provides `customer_scoped_transaction`; `tests/test_row_level_security.py` (12 tests); `docs/row_level_security.md`.
+- Limits: not wired into any API endpoint; the scope is a session setting, so it defends the query layer, not a malicious holder of the role; coordinator tables are not covered; no performance measurement.
