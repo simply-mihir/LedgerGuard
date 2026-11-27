@@ -37,6 +37,8 @@ export interface OverviewData {
   oldest_pending_age_seconds: number;
   clearing_sum: number;
   last_reconciliation_status: string;
+  counts_complete?: boolean;
+  clearing_complete?: boolean;
   fault_injection_enabled: boolean;
 }
 

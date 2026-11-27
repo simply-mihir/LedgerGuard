@@ -117,3 +117,30 @@ def test_operator_experiment_forbidden_in_production(monkeypatch):
     )
     assert response.status_code == 403
     assert "disabled in production" in response.json()["detail"].lower()
+
+
+@pytest.mark.integration
+def test_operator_overview_never_reports_pass_when_a_ledger_cannot_be_read(monkeypatch):
+    """A clearing sum over fewer ledgers than exist proves nothing; it must read UNKNOWN, not PASS."""
+    from ledgerguard.api import routes
+
+    real = routes.get_db_connection
+    dead = routes.settings.ledger2_db_url
+
+    def flaky(url, *a, **kw):
+        if url == dead:
+            raise ConnectionError("ledger-2 down")
+        return real(url, *a, **kw)
+
+    monkeypatch.setattr(routes, "get_db_connection", flaky)
+    data = client.get("/v1/operator/overview", headers=AUTH_HEADERS).json()
+    assert data["reachability"]["ledger-2"] is False
+    assert data["clearing_complete"] is False
+    assert data["last_reconciliation_status"] == "UNKNOWN"
+
+
+@pytest.mark.integration
+def test_operator_overview_marks_itself_complete_when_everything_is_readable():
+    data = client.get("/v1/operator/overview", headers=AUTH_HEADERS).json()
+    assert data["counts_complete"] is True and data["clearing_complete"] is True
+    assert data["last_reconciliation_status"] in ("PASS", "FAIL")

@@ -502,12 +502,14 @@ export default function ConsoleOverviewPage() {
                     fontSize: '0.6875rem',
                     padding: '0.2rem 0.55rem',
                     borderRadius: 'var(--radius-pill, 9999px)',
-                    background: overview?.clearing_sum === 0 ? 'rgba(5, 150, 105, 0.15)' : 'rgba(220, 38, 38, 0.15)',
-                    color: overview?.clearing_sum === 0 ? '#34D399' : '#EF4444',
+                    background: overview?.clearing_complete === false ? 'rgba(245, 158, 11, 0.15)' : overview?.clearing_sum === 0 ? 'rgba(5, 150, 105, 0.15)' : 'rgba(220, 38, 38, 0.15)',
+                    color: overview?.clearing_complete === false ? '#F59E0B' : overview?.clearing_sum === 0 ? '#34D399' : '#EF4444',
                     fontWeight: 700,
                   }}
                 >
-                  {overview?.clearing_sum === 0 ? 'Σ ΔL = ₹0.00 (VERIFIED)' : 'INVARIANT BREACH'}
+                  {overview?.clearing_complete === false
+                    ? 'UNVERIFIED (a ledger could not be read)'
+                    : overview?.clearing_sum === 0 ? 'Σ ΔL = ₹0.00 (VERIFIED)' : 'INVARIANT BREACH'}
                 </span>
               </div>
 
@@ -530,8 +532,8 @@ export default function ConsoleOverviewPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
                   <span style={{ color: '#94A3B8' }}>Clearing Sum Across Ledgers:</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: overview?.clearing_sum === 0 ? '#34D399' : '#EF4444' }}>
-                    {formatINR(overview?.clearing_sum ?? 0)}
+                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: overview?.clearing_complete === false ? '#F59E0B' : overview?.clearing_sum === 0 ? '#34D399' : '#EF4444' }}>
+                    {overview?.clearing_complete === false ? '—' : formatINR(overview?.clearing_sum ?? 0)}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

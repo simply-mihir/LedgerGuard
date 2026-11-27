@@ -16,6 +16,7 @@ from ledgerguard.domain.models import (
     PostingSide,
     StatementEntry,
 )
+from ledgerguard.participant import request_idempotency
 
 
 class AccountNotFoundError(Exception):
@@ -38,8 +39,13 @@ def create_ledger_account(
     normal_side: NormalSide | None = None,
     currency: str = "INR",
     name: str | None = None,
+    idempotency_key: str | None = None,
 ) -> AccountBalanceView:
-    """Create a new ledger account and its associated zeroed balance row."""
+    """Create a new ledger account and its associated zeroed balance row.
+
+    With ``idempotency_key`` the claim is taken in the same transaction as the insert, so a retried
+    or concurrent duplicate returns the first account instead of creating another.
+    """
     acct_id = account_id or uuid4()
     if normal_side is None:
         normal_side = (
@@ -47,6 +53,15 @@ def create_ledger_account(
         )
 
     with get_db_connection(db_url) as conn:
+        if idempotency_key:
+            replay = request_idempotency.claim(
+                conn, request_idempotency.CREATE_ACCOUNT, idempotency_key,
+                {"customer_id": str(customer_id) if customer_id else None,
+                 "account_type": account_type.value, "currency": currency, "name": name},
+            )
+            if replay is not None:
+                conn.rollback()
+                return get_account_balance(db_url, UUID(replay["account_id"]))
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -65,6 +80,9 @@ def create_ledger_account(
             """,
                 (acct_id,),
             )
+        if idempotency_key:
+            request_idempotency.complete(
+                conn, request_idempotency.CREATE_ACCOUNT, idempotency_key, {"account_id": str(acct_id)})
         conn.commit()
 
     return get_account_balance(db_url, acct_id)

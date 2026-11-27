@@ -143,6 +143,9 @@ class SystemOverviewResponse(BaseModel):
     clearing_sum: int
     last_reconciliation_status: str
     fault_injection_enabled: bool
+    # False when a source could not be read; the matching figures are then not measurements.
+    counts_complete: bool = True
+    clearing_complete: bool = True
 
 
 class DirectoryAccountResponse(BaseModel):

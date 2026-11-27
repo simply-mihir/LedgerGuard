@@ -369,7 +369,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 350 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 360 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
 - **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
@@ -434,7 +434,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_evidence_provenance.py`](tests/test_evidence_provenance.py) | 3 | Evidence generators refuse dirty trees and record commit SHA, tree OID and clean-tree status. |
 | [`tests/test_history_reconstruction.py`](tests/test_history_reconstruction.py) | 4 | As-of-time balance reconstruction and checksummed snapshots. |
 | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) | 9 | Atomic intra-ledger transfers, idempotency fingerprints, 100 concurrent race spends against balance limit, compensating reversals. |
-| [`tests/test_operator_api.py`](tests/test_operator_api.py) | 5 | REST API endpoints, system overview metrics, workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
+| [`tests/test_operator_api.py`](tests/test_operator_api.py) | 7 | REST API endpoints, system overview metrics (never PASS when a ledger cannot be read), workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
 | [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 16 | Argon2id verification, SHA-256 session token hashing, idle & absolute expiry, TOTP drift & replay rejection, rate limiting, CSRF and origin validation, proxy security. |
 | [`tests/test_opposite_direction_concurrency.py`](tests/test_opposite_direction_concurrency.py) | 2 | Opposite-direction transfers on shared accounts (deadlock-free lock ordering). |
 | [`tests/test_perf_study.py`](tests/test_perf_study.py) | 8 | Concurrency and performance study harness and provenance. |
@@ -459,9 +459,10 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_tamper_evident_journal.py`](tests/test_tamper_evident_journal.py) | 6 | Journal hash chains, checkpoints and tamper detection. |
 | [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
 | [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
+| [`tests/test_request_idempotency.py`](tests/test_request_idempotency.py) | 8 | Funding, cash-out and account creation honour `Idempotency-Key`: sequential and 8-way concurrent retries write once, a changed payload is `409`, a rejected request leaves no claim, and the runtime role cannot delete or rewrite claims. |
 | [`tests/test_participant_conformance.py`](tests/test_participant_conformance.py) | 25 | Each ledger's intent, hold and settlement journals must refine the specification state implied by the coordinator trace: exhaustive source/destination/hold state matrix for settled, cancelled and in-flight traces, every ledger-local rule's corruption detected, tampering with real rows (rolled back) detected, orphan participant state reported. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **352** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **362** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 

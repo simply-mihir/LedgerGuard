@@ -175,12 +175,16 @@ def create_account(
     _: None = Depends(verify_bearer_token),
 ) -> AccountResponse:
     """Idempotently create an active customer wallet account."""
-    acct = create_ledger_account(
-        get_ledger_db_url(),
-        customer_id=req.customer_id,
-        currency=req.currency,
-        name=req.name,
-    )
+    try:
+        acct = create_ledger_account(
+            get_ledger_db_url(),
+            customer_id=req.customer_id,
+            currency=req.currency,
+            name=req.name,
+            idempotency_key=idempotency_key,
+        )
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return AccountResponse(
         account_id=acct.account_id,
         currency=acct.currency,
@@ -354,11 +358,14 @@ def fund_account(
             amt,
             correlation_id=req.correlation_id or idempotency_key,
             description=req.description,
+            idempotency_key=idempotency_key,
         )
         return {"status": "POSTED", "result": result}
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PostingError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=422, detail=str(exc)
         ) from exc
 
 
@@ -377,11 +384,14 @@ def cash_out(
             amt,
             correlation_id=req.correlation_id or idempotency_key,
             description=req.description,
+            idempotency_key=idempotency_key,
         )
         return {"status": "POSTED", "result": result}
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PostingError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=422, detail=str(exc)
         ) from exc
 
 
@@ -421,7 +431,7 @@ def create_transfer(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except InsufficientFundsError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=422, detail=str(exc)
         ) from exc
     except AccountNotActiveError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -478,7 +488,7 @@ def reverse_transfer(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ReversalRejectedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=422, detail=str(exc)
         ) from exc
     except TransferError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -573,6 +583,8 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
     settled_transfers = 0
     pending_transfers = 0
     oldest_age = 0
+    counts_complete = True
+    clearing_complete = True
 
     try:
         with get_db_connection(settings.coordinator_db_url) as conn:
@@ -608,7 +620,9 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
                 pending_transfers = int(p_row["c"]) if p_row else 0
                 oldest_age = int(p_row["max_age"]) if p_row else 0
     except Exception:
-        pass
+        # Report the gap instead of presenting zeros as if they were measured.
+        logger.warning("operator overview: coordinator counts unavailable", exc_info=True)
+        counts_complete = False
 
     clearing_sum = 0
     for url in [settings.ledger1_db_url, settings.ledger2_db_url]:
@@ -624,7 +638,9 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
                     if clr_row:
                         clearing_sum += int(clr_row["posted_balance_minor"])
         except Exception:
-            pass
+            logger.warning("operator overview: clearing balance unavailable for %s", url.rsplit("@", 1)[-1],
+                           exc_info=True)
+            clearing_complete = False
 
     return SystemOverviewResponse(
         reachability=reachability,
@@ -635,7 +651,11 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
         pending_transfers=pending_transfers,
         oldest_pending_age_seconds=oldest_age,
         clearing_sum=clearing_sum,
-        last_reconciliation_status="PASS" if clearing_sum == 0 else "FAIL",
+        counts_complete=counts_complete,
+        clearing_complete=clearing_complete,
+        # A sum over fewer ledgers than exist proves nothing, so it is never reported as PASS.
+        last_reconciliation_status=(
+            "UNKNOWN" if not clearing_complete else "PASS" if clearing_sum == 0 else "FAIL"),
         fault_injection_enabled=settings.env != "production",
     )
 

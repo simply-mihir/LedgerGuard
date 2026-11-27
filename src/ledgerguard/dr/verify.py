@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -136,7 +137,8 @@ def run_disposable_dr_drill(
     _ = l2_container = _resolve_container_for_port(l2_port)
 
     root_dir = Path(__file__).parent.parent.parent.parent
-    dump_dir = work_dir or Path("/tmp")
+    # A private (0700) directory, not a predictable file in world-writable /tmp.
+    dump_dir = work_dir or Path(tempfile.mkdtemp(prefix="ledgerguard-dr-"))
     dump_path = dump_dir / f"dr_{l1_db}.dump"
 
     for base, name in ((coord_base, coord_db), (l1_base, l1_db), (l2_base, l2_db)):
@@ -268,6 +270,8 @@ def run_disposable_dr_drill(
     finally:
         if dump_path.exists():
             dump_path.unlink(missing_ok=True)
+        if work_dir is None:
+            dump_dir.rmdir()
         for base, name in ((coord_base, coord_db), (l1_base, l1_db), (l2_base, l2_db)):
             with psycopg.connect(f"{base}/postgres", autocommit=True) as conn:
                 conn.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE);")
