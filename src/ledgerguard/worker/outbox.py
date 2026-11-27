@@ -3,6 +3,7 @@
 from typing import Any
 from uuid import UUID
 
+import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -130,3 +131,20 @@ def mark_outbox_failed(
                 (retry_delay_seconds, outbox_id),
             )
         conn.commit()
+
+
+OUTBOX_CHANNEL = "outbox_ready"
+
+
+def wait_for_outbox_work(db_url: str, timeout_seconds: float) -> bool:
+    """Block until a new outbox event is committed or ``timeout_seconds`` passes.
+
+    Returns True when woken by a notification, False on timeout. A notification is only a hint:
+    callers must still claim work from the table, and must keep polling on a timer because a
+    notification sent while nobody listens (or across a server restart) is lost.
+    """
+    with psycopg.connect(db_url, autocommit=True) as conn:
+        conn.execute(f"LISTEN {OUTBOX_CHANNEL}")
+        for _ in conn.notifies(timeout=timeout_seconds, stop_after=1):
+            return True
+    return False

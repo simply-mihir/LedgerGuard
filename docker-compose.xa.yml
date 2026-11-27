@@ -5,6 +5,6 @@
 #   docker compose -f docker-compose.yml -f docker-compose.xa.yml up -d
 services:
   postgres-ledger1:
-    command: ["postgres", "-c", "max_prepared_transactions=64"]
+    command: ["postgres", "-c", "max_prepared_transactions=64", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
   postgres-ledger2:
-    command: ["postgres", "-c", "max_prepared_transactions=64"]
+    command: ["postgres", "-c", "max_prepared_transactions=64", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]

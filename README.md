@@ -369,7 +369,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 453 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 467 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
 - **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
@@ -464,8 +464,12 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_storage_tuning.py`](tests/test_storage_tuning.py) | 6 | Fillfactor/autovacuum parameters on the hot-update tables, default fillfactor kept on append-only journals, and a measurement that fillfactor 90 makes every balance update HOT without growing the table. |
 | [`tests/test_request_idempotency.py`](tests/test_request_idempotency.py) | 15 | Funding, cash-out and account creation honour `Idempotency-Key`: sequential and 8-way concurrent retries write once, a changed payload is `409`, a rejected request leaves no claim, the runtime role cannot delete or rewrite claims, an unknown account is `422` (never `500`), and `amount_minor`/currency reject coerced or malformed input. |
 | [`tests/test_participant_conformance.py`](tests/test_participant_conformance.py) | 28 | Each ledger's intent, hold and settlement journals must refine the specification state implied by the coordinator trace: exhaustive source/destination/hold state matrix for settled, cancelled and in-flight traces, every ledger-local rule's corruption detected, the ledger refuses tampering with real rows, and tampering that bypasses the triggers is still detected (rolled back), orphan participant state reported. |
+| [`tests/test_reporting_views.py`](tests/test_reporting_views.py) | 6 | Trial-balance and account-balance views agree with raw journal lines and the ledger's balance table; coordinator transfer views; reporter has SELECT only; views are `security_invoker`. |
+| [`tests/test_query_stats.py`](tests/test_query_stats.py) | 4 | `pg_stat_statements` is preloaded on all three databases and attributes calls and time to a marked statement; ordering is allowlisted. |
+| [`tests/test_outbox_notify.py`](tests/test_outbox_notify.py) | 3 | A committed outbox event wakes a LISTEN-ing waiter in under a second; a rolled-back one never does; idle waits time out so callers can poll. |
+| [`tests/test_pitr.py`](tests/test_pitr.py) | 1 | Base backup + archived WAL recover a dropped `journal_lines` to a named restore point; later writes are excluded and the journal hash chain verifies. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **455** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **469** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 
