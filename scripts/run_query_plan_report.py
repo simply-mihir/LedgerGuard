@@ -39,9 +39,11 @@ def main() -> int:
     for db in (COORD, LEDGER):
         with ScratchVolume(db) as vol:
             planned = {q.name: explain(vol, q) for q in CATALOG if q.db == db}
+            # Judge every plan before any negative control drops an index from the scratch copy.
+            chosen = {n: used_index_matches_intended(vol, r) for n, r in planned.items()}
             for q in (q for q in CATALOG if q.db == db):
                 r = planned[q.name]
-                chose_intended = used_index_matches_intended(vol, r)  # before any control mutates
+                chose_intended = chosen[q.name]
                 degraded = explain_without_index(vol, q) if q.name in CONTROLS else None
                 rows.append({
                     "query": q.name, "database": db, "table": q.relation, "intended_index": q.index,
