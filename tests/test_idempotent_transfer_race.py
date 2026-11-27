@@ -120,7 +120,7 @@ def test_database_rejects_a_second_transfer_row_for_a_claimed_key() -> None:
     sql = ("INSERT INTO transfers (transfer_id, idempotency_key, source_account_id, "
            "destination_account_id, amount_minor, currency, transfer_type, state, "
            "source_ledger_id, destination_ledger_id) "
-           "VALUES (%s,%s,%s,%s,%s,%s,%s,'SETTLED',%s,%s)")
+           "VALUES (%s,%s,%s,%s,%s,%s,%s,'ACCEPTED',%s,%s)")  # state is irrelevant to key uniqueness
     try:
         with psycopg.connect(settings.coordinator_admin_db_url) as conn:
             conn.execute(sql, args)

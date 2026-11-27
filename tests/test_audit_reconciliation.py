@@ -138,10 +138,17 @@ def test_stopped_and_drained_audit_detects_undrained_transfers():
                 INSERT INTO transfers (
                     transfer_id, idempotency_key, source_account_id, destination_account_id,
                     amount_minor, currency, transfer_type, state, source_ledger_id, destination_ledger_id
-                ) VALUES (%s, %s, %s, %s, 1000, 'INR', 'CROSS_LEDGER', 'COMMITTING', 'ledger-1', 'ledger-2');
+                ) VALUES (%s, %s, %s, %s, 1000, 'INR', 'CROSS_LEDGER', 'ACCEPTED', 'ledger-1', 'ledger-2');
             """,
                 (t_id, f"undrained-{t_id}", uuid4(), uuid4()),
             )
+            # Reach COMMITTING the legal way: the state machine requires a durable COMMIT decision.
+            cur.execute(
+                "INSERT INTO transfer_decisions (transfer_id, decision, decision_version, reason, decided_at) "
+                "VALUES (%s, 'COMMIT', 1, 'test', NOW());",
+                (t_id,),
+            )
+            cur.execute("UPDATE transfers SET state = 'COMMITTING' WHERE transfer_id = %s;", (t_id,))
         conn.commit()
 
     report = run_cross_ledger_reconciliation(COORD_DB_URL, LEDGER_URLS, drained=True)
@@ -153,5 +160,6 @@ def test_stopped_and_drained_audit_detects_undrained_transfers():
     # Cleanup test row
     with get_db_connection(COORD_ADMIN_DB_URL) as conn:
         with conn.cursor() as cur:
+            cur.execute("DELETE FROM transfer_decisions WHERE transfer_id = %s;", (t_id,))
             cur.execute("DELETE FROM transfers WHERE transfer_id = %s;", (t_id,))
         conn.commit()

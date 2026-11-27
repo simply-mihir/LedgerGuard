@@ -188,10 +188,17 @@ def test_every_recorded_transfer_in_the_database_conforms(workload: dict[str, UU
     assert {k: v for k, (_, v) in res.items() if v} == {}
 
 
-def _tamper(ledger: str, sql: str, tid: UUID, expect_state: str) -> list[str]:
-    """Apply ``sql`` on one ledger inside a transaction, check the transfer, then roll back."""
+def _tamper(ledger: str, sql: str, tid: UUID, expect_state: str, *, bypass_triggers: bool) -> list[str]:
+    """Apply ``sql`` on one ledger inside a transaction, check the transfer, then roll back.
+
+    The ledger's own state-machine triggers refuse these edits, so ``bypass_triggers`` simulates the
+    case the conformance check exists for: a store that was corrupted *around* the triggers (restore
+    from a bad backup, a disabled trigger, direct file damage).
+    """
     other = "ledger-2" if ledger == "ledger-1" else "ledger-1"
     with psycopg.connect(LEDGERS[ledger]) as bad, psycopg.connect(LEDGERS[other]) as good:
+        if bypass_triggers:
+            bad.execute("SET LOCAL session_replication_role = replica")
         bad.execute(sql, {"t": tid})
         tf = fetch_transfer_facts(COORD, {ledger: bad, other: good}, [tid])[0]
         assert tf.state == expect_state
@@ -201,15 +208,26 @@ def _tamper(ledger: str, sql: str, tid: UUID, expect_state: str) -> list[str]:
         return reasons
 
 
-@pytest.mark.integration
-@pytest.mark.parametrize("sql,needle", [
+TAMPERS = [
     ("UPDATE holds SET status = 'ACTIVE' WHERE transfer_id = %(t)s", "hold ACTIVE"),
     ("UPDATE transfer_intents SET status = 'CANCELLED' WHERE transfer_id = %(t)s", "journal exists but intent"),
     ("UPDATE transfer_intents SET amount_minor = amount_minor + 1 WHERE transfer_id = %(t)s", "intent amount"),
-])
-def test_tampering_with_the_source_ledger_of_a_settled_transfer_is_detected(
+]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("sql,needle", TAMPERS)
+def test_the_ledger_refuses_to_tamper_with_a_settled_transfer(
         workload: dict[str, UUID], sql: str, needle: str) -> None:
-    reasons = _tamper("ledger-1", sql, workload["settled"], "SETTLED")
+    with pytest.raises(psycopg.errors.ObjectNotInPrerequisiteState):
+        _tamper("ledger-1", sql, workload["settled"], "SETTLED", bypass_triggers=False)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("sql,needle", TAMPERS)
+def test_tampering_that_bypasses_the_triggers_is_still_detected_by_conformance(
+        workload: dict[str, UUID], sql: str, needle: str) -> None:
+    reasons = _tamper("ledger-1", sql, workload["settled"], "SETTLED", bypass_triggers=True)
     assert any(needle in r for r in reasons), reasons
 
 
