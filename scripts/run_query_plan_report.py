@@ -41,10 +41,11 @@ def main() -> int:
             planned = {q.name: explain(vol, q) for q in CATALOG if q.db == db}
             for q in (q for q in CATALOG if q.db == db):
                 r = planned[q.name]
+                chose_intended = used_index_matches_intended(vol, r)  # before any control mutates
                 degraded = explain_without_index(vol, q) if q.name in CONTROLS else None
                 rows.append({
                     "query": q.name, "database": db, "table": q.relation, "intended_index": q.index,
-                    "planner_chose_intended": used_index_matches_intended(vol, r),
+                    "planner_chose_intended": chose_intended,
                     "seq_scan": r.seq_scan_on_relation,
                     "seq_scan_without_index": None if degraded is None else degraded.seq_scan_on_relation,
                     "note": q.note,
