@@ -99,10 +99,23 @@ class Settings(BaseSettings):
     worker_batch_size: int = Field(default=20, alias="WORKER_BATCH_SIZE")
     worker_lock_timeout_seconds: int = Field(default=10, alias="WORKER_LOCK_TIMEOUT_SECONDS")
 
-    # Transient PostgreSQL Concurrency Retry (40P01 / 40001)
+    # Transient PostgreSQL Concurrency Retry (40P01 / 40001 / 55P03)
     db_transient_max_retries: int = Field(default=3, ge=0, le=10, alias="DB_TRANSIENT_MAX_RETRIES")
     db_transient_base_backoff_ms: float = Field(default=10.0, ge=1.0, le=1000.0, alias="DB_TRANSIENT_BASE_BACKOFF_MS")
     db_transient_max_backoff_ms: float = Field(default=250.0, ge=10.0, le=5000.0, alias="DB_TRANSIENT_MAX_BACKOFF_MS")
+
+    # Server-side time limits applied to every pooled connection (0 disables a limit).
+    # lock_timeout bounds a wait for a row/table lock (SQLSTATE 55P03, retried as transient);
+    # statement_timeout bounds one statement (57014, surfaced as 503, never retried because the
+    # statement may be slow rather than blocked); idle_in_transaction_session_timeout ends a
+    # session that holds locks while doing nothing (a crashed or stalled client).
+    db_lock_timeout_ms: int = Field(default=5000, ge=0, le=600_000, alias="DB_LOCK_TIMEOUT_MS")
+    db_statement_timeout_ms: int = Field(
+        default=60_000, ge=0, le=3_600_000, alias="DB_STATEMENT_TIMEOUT_MS"
+    )
+    db_idle_in_transaction_timeout_ms: int = Field(
+        default=60_000, ge=0, le=3_600_000, alias="DB_IDLE_IN_TRANSACTION_TIMEOUT_MS"
+    )
 
     # Observability / OpenTelemetry
     otel_exporter: Literal["none", "console", "otlp", "memory"] = Field(
@@ -111,6 +124,17 @@ class Settings(BaseSettings):
     otel_endpoint: str = Field(
         default="http://localhost:4318/v1/traces", alias="OTEL_EXPORTER_OTLP_ENDPOINT"
     )
+
+    def db_session_options(self) -> str:
+        """libpq ``options`` string applying the configured server-side time limits."""
+        return " ".join(
+            f"-c {name}={value}"
+            for name, value in (
+                ("lock_timeout", self.db_lock_timeout_ms),
+                ("statement_timeout", self.db_statement_timeout_ms),
+                ("idle_in_transaction_session_timeout", self.db_idle_in_transaction_timeout_ms),
+            )
+        )
 
     @model_validator(mode="after")
     def _validate_secrets(self) -> "Settings":

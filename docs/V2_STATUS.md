@@ -232,3 +232,8 @@ every push.
 - Added `src/ledgerguard/isolation/study.py`: deterministic two-session reproduction of lost update, write skew, non-repeatable read and phantom at READ COMMITTED, REPEATABLE READ and SERIALIZABLE, with each mitigation, plus the real `post_journal` under concurrent overdraft at all three levels.
 - Finding: the kernel's ordered `FOR UPDATE` locking keeps the invariant at every level and needs zero retries at READ COMMITTED; REPEATABLE READ does not prevent write skew. No production code changed.
 - Evidence in `docs/isolation/`, write-up in `docs/isolation_study.md`, `tests/test_isolation_study.py` (6 tests).
+
+### Gap: no lock, statement or idle-in-transaction timeouts
+- Every pooled connection now sets `lock_timeout` (5 s), `statement_timeout` (60 s) and `idle_in_transaction_session_timeout` (60 s); each is configurable and `0` disables it.
+- `55P03` (lock timeout) is classified as transient and retried across the whole local transaction; `57014` (statement timeout) is deliberately not retried. The API maps both, and exhausted retries, to `503` + `Retry-After` with no query detail.
+- `tests/test_db_timeouts.py` (9 tests); `docs/deployment.md` explains tuning. Not verified: behaviour of the limits under production-scale load.

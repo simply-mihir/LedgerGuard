@@ -3,13 +3,16 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import psycopg
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ledgerguard.api.auth_routes import auth_router
 from ledgerguard.api.rate_limit import RateLimitMiddleware
 from ledgerguard.api.routes import router
 from ledgerguard.db.pool import close_all_pools
+from ledgerguard.db.retry import TransientRetryExhaustedError
 from ledgerguard.observability import extract_trace_context, inject_trace_carrier, safe_span
 
 
@@ -54,6 +57,21 @@ def create_app() -> FastAPI:
             if "traceparent" in carrier:
                 response.headers["traceparent"] = carrier["traceparent"]
             return response
+
+    @app.exception_handler(psycopg.errors.LockNotAvailable)
+    @app.exception_handler(psycopg.errors.QueryCanceled)
+    @app.exception_handler(TransientRetryExhaustedError)
+    async def database_busy_handler(request: Request, exc: Exception) -> JSONResponse:
+        """A database time limit or exhausted transient retry is overload, not a server bug.
+
+        Nothing is leaked about the query; the client may retry, and every write path is
+        idempotent, so a retry cannot double-apply.
+        """
+        return JSONResponse(
+            {"detail": "The ledger database is busy. Retry shortly."},
+            status_code=503,
+            headers={"Retry-After": "1"},
+        )
 
     @app.get("/health", tags=["System"])
     def health_check() -> dict[str, str]:

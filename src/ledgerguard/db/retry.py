@@ -1,4 +1,4 @@
-"""Bounded transaction retry for PostgreSQL transient concurrency errors (40P01, 40001)."""
+"""Bounded transaction retry for PostgreSQL transient concurrency errors (40P01, 40001, 55P03)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from ledgerguard.observability import safe_span
 
 logger = logging.getLogger(__name__)
 
-_TRANSIENT_SQLSTATES = frozenset({"40P01", "40001"})
+_TRANSIENT_SQLSTATES = frozenset({"40P01", "40001", "55P03"})
 
 _retry_lock = threading.Lock()
-_retry_counts: dict[str, int] = {"40P01": 0, "40001": 0}
+_retry_counts: dict[str, int] = {"40P01": 0, "40001": 0, "55P03": 0}
 
 
 class TransientRetryExhaustedError(Exception):
@@ -46,6 +46,10 @@ def _extract_transient_sqlstate(exc: BaseException) -> str | None:
         return "40P01"
     if isinstance(exc, psycopg.errors.SerializationFailure):
         return "40001"
+    if isinstance(exc, psycopg.errors.LockNotAvailable):
+        # lock_timeout fired: the statement (and so the transaction) was rolled back and nothing
+        # was committed, so re-running the whole local transaction is safe.
+        return "55P03"
     sqlstate = getattr(exc, "sqlstate", None)
     if isinstance(sqlstate, str) and sqlstate in _TRANSIENT_SQLSTATES:
         return sqlstate
@@ -62,6 +66,8 @@ def run_with_transient_retry[T](
 ) -> T:
     """Execute a complete local transaction boundary with bounded retry on 40P01/40001 only.
 
+    A statement_timeout (57014) is deliberately not retried: the work may be slow rather than
+    blocked, and repeating it would multiply the load that caused the timeout.
     Never retries validation errors, insufficient funds, invariant violations,
     permanent DB errors, or unclassified exceptions.
     """

@@ -33,6 +33,25 @@ bounded (10,000 clients, least-recently-used eviction), and the client is the ne
 right-most `X-Forwarded-For` entry only when the peer is in `LEDGERGUARD_TRUSTED_PROXIES`. Keep that
 list to your own reverse proxy. For a hard limit, also configure rate limits at the proxy.
 
+## Database time limits
+
+Every pooled connection is opened with three server-side limits (`0` disables one):
+
+| Setting | Default | What happens when it fires |
+|---|---|---|
+| `DB_LOCK_TIMEOUT_MS` | 5000 | A wait for a row/table lock fails with SQLSTATE `55P03`. The transaction rolled back, so `run_with_transient_retry` re-runs the whole local transaction (same bounded retry as deadlocks and serialization failures). If retries are exhausted the API answers `503` with `Retry-After`. |
+| `DB_STATEMENT_TIMEOUT_MS` | 60000 | One statement is cancelled (`57014`). It is **not** retried: the work may be slow rather than blocked, and repeating it would add load. The API answers `503`. |
+| `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | 60000 | The server ends a session that holds a transaction open while idle, which releases its row locks. This bounds the damage of a stalled or half-dead client. |
+
+Why: without them a single stuck transaction could queue every other writer on a hot row
+indefinitely. The limits turn that into a bounded, classified, retryable failure. All write paths
+are idempotent, so a client retrying after a `503` cannot double-apply.
+
+Tuning: keep `DB_STATEMENT_TIMEOUT_MS` above your slowest legitimate query (full hash-chain
+verification of a very large journal is the longest operation) and `DB_LOCK_TIMEOUT_MS` well below
+the API's own request timeout. Migrations and disaster-recovery tooling use their own connections
+and are not subject to these limits.
+
 ## TLS
 
 The application speaks plain HTTP and expects a TLS-terminating reverse proxy in front of it.
