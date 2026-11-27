@@ -27,7 +27,7 @@ whether the TLA+ specification (`formal/tla/LedgerGuardTCC.tla`) could have prod
    `LedgerGuardTCCMultiFaults.tla` extends this with per-transfer re-deliverable messages, bounded
    message loss (2), a worker crash/restart (1) and a durable-state recovery action (654,840
    distinct states); a variant whose recovery flips a COMMIT to CANCEL is rejected by TLC.
-   Trace conformance still covers coordinator events only, not participant-side events.
+   Participant-side conformance is described below.
 
 ## Event-to-spec mapping
 
@@ -60,6 +60,44 @@ uv run pytest tests/test_trace_conformance.py tests/test_tla_multi_transfer.py
 * A tampered audit log (a `SOURCE_CANCELLED` row injected after a settled transfer) is detected;
   the test performs the injection inside a transaction it rolls back.
 
+## Participant-side conformance
+
+`ledgerguard.conformance.participant` reads, for each transfer, what each ledger actually holds
+(`transfer_intents`, `holds`, and the `SOURCE_SETTLE` / `DESTINATION_SETTLE` journals) and checks:
+
+1. **Ledger-local rules.** An intent is `CONFIRMED` exactly when one settlement journal exists, and
+   that journal debits/credits the transfer's accounts and the clearing account for exactly the
+   transfer amount; a hold is `ACTIVE` / `CONSUMED` / `RELEASED` exactly when the intent is
+   `PREPARED` / `CONFIRMED` / `CANCELLED`, on the right account and amount; no duplicates; no
+   hold or foreign-direction journal on the wrong ledger.
+2. **Refinement.** The coordinator trace is replayed through the Python port of the specification
+   to the set of reachable states; some state must have the ledgers' source state, destination
+   state and hold. A transfer still in flight may have ledgers *ahead* of the log (an
+   acknowledgement not yet recorded); a finished one may not. A `CANCELLED` transfer must have
+   nothing prepared, confirmed or reserved on either ledger, which the specification alone would
+   not force on the reject path.
+
+Reproduce with `uv run python scripts/check_participant_conformance.py` (writes
+`docs/conformance/participant_results.json`) and
+`uv run pytest tests/test_participant_conformance.py`.
+
+Results on the development databases: every recorded transfer (settled and cancelled, including chaos
+and crash-recovered ones) conforms. Exhaustive tests enumerate all source x destination intent
+states against the settled, cancelled and committing traces and accept exactly the expected
+combinations; each local rule has a corruption test; tampering with real rows (hold flipped to
+`ACTIVE`, intent flipped to `CANCELLED`, intent amount changed) is detected inside a rolled-back
+transaction.
+
+**Finding.** The check also lists *orphans*: participant intents or holds for a transfer the
+coordinator has no record of. The development ledger-1 database had 35 `ACTIVE` holds (140,000 minor
+units reserved) with no owning transfer. They came from
+`test_source_prepare_hold_and_idempotency`, a participant-level test that prepared a hold and never
+released it, so each suite run stranded one. The test now releases it through the real cancel path;
+no new holds accumulate. The 35 existing holds are left in place (releasing them is a data change
+for the owner to approve). The coordinator role cannot delete transfers, so this cannot arise from the
+application itself; it matters because an orphaned hold is reserved money nothing will ever settle
+or cancel.
+
 ## Observations about the system
 
 * The reject path (`SOURCE_PREPARE_REJECTED` / `DESTINATION_PREPARE_REJECTED`) records neither
@@ -72,8 +110,12 @@ uv run pytest tests/test_trace_conformance.py tests/test_tla_multi_transfer.py
 
 * Trace validation is existential and weak per trace; its strength comes from the mutation
   results and from the invariants TLC proves on the specification itself.
-* Only coordinator-observable events are in the trace. Participant tables (holds, inbox) are not
-  yet projected into tokens, so participant-side divergence is not detected here.
+* The coordinator trace itself contains only coordinator-observable events; the participant check
+  below is a separate projection of the ledgers' tables, not extra tokens in that trace. The
+  `command_inbox` and `participant_outbox` tables are not projected.
+* Participant conformance abstracts a hold to active/inactive (the specification has one amount)
+  and checks amounts and accounts through the local rules instead. It does not order events across
+  ledgers by time (no shared clock); ordering comes from the coordinator trace and the specification.
 * Marker events are only constrained by state predicates, so their relative order is not checked.
 * The spec is bounded (`MaxLosses = MaxCrashes = 1`) and single-transfer; the multi-transfer
   model drops the message layer. Neither is a proof about the Python/PostgreSQL implementation.

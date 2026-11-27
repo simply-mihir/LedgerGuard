@@ -1,0 +1,17 @@
+{
+  "source": {
+    "git_sha": "c9f57c676ed7d61700dd47a6c85f273f9144c76c",
+    "git_tree": "e7ab493fee3dfce4d5a78fca1576909f73e8f369",
+    "working_tree_clean": false
+  },
+  "transfers_checked": 7557,
+  "by_final_state": {
+    "SETTLED": 7381,
+    "CANCELLED": 176
+  },
+  "non_conforming": [],
+  "orphan_participant_transfers": {
+    "ledger-1": 244,
+    "ledger-2": 174
+  }
+}

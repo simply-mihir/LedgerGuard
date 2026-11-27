@@ -182,7 +182,7 @@ with message loss, worker crash/restart and durable-state recovery. TLC (654,840
 states) verifies the safety invariants and termination; two defective variants (balance-only
 funds check, recovery that reverses a COMMIT) are rejected with counterexamples. The check
 script and CI (`VERIFY_BROKEN=1`) run all of it. Remaining limits: small bounds, and trace
-conformance still covers coordinator events, not participant-side events.
+conformance covers coordinator events plus a participant-side projection of intents, holds and settlement journals (not `command_inbox` / `participant_outbox`).
 
 ## Benchmark rigor (gap 5)
 
@@ -248,4 +248,5 @@ every push.
 - Plan study: `src/ledgerguard/db/query_plans.py` plans 18 hot queries at volume (60k-100k rows) and asserts the intended index with no sequential scan; negative controls show the added indexes matter. Added three indexes, dropped three redundant ones (`ledger/011`). Evidence in `docs/query_plans/`, write-up in `docs/query_plans.md`.
 - Journal partitioning: studied and deliberately not enabled. `src/ledgerguard/db/partition_study.py` shows native layouts either lose global uniqueness of `journal_id`/`sequence_number`, make `journal_id` lookups probe every partition, or allow `DROP`/`DETACH` to erase history past the immutability triggers. A guard test keeps the real journals unpartitioned. Decision and revisit conditions in `docs/journal_partitioning.md`; evidence in `docs/partitioning/`.
 - Disk and clock faults: a disk-full test on a throwaway Postgres (16 MB data tablespace) shows clean 53100 failures, intact reconciliation and hash chain, and recovery. Found and fixed two bugs: infrastructure errors were wrapped as 422 `PostingError` (now classified by `db/errors.py`, propagated, and returned as 503), and the outbox lease/retry used the app clock against the database's `NOW()` (now database-side). fsync/torn-write, WAL exhaustion, DB-host clock steps and app-side expiry under skew remain untested. See `docs/disk_and_clock_faults.md`.
+- Participant-side trace conformance: `ledgerguard.conformance.participant` checks each ledger's intent, hold and settlement journals against ledger-local rules and against the specification state reachable from the coordinator trace (finished transfers strictly, in-flight ones allowing the ledgers to run ahead). All 7,557 recorded dev transfers conform; exhaustive state-matrix, per-rule corruption and rolled-back tamper tests prove it is not vacuous. It also lists orphan participant state: it found 35 stranded 4,000-unit holds leaked by one participant-level test (fixed; existing holds left for the owner). See `docs/trace_conformance.md`.
 - Limits: synthetic volume on one instance; the write-cost benefit of dropping indexes was not benchmarked; this repository's dev database still contains the six duplicate `SETTLED` rows from the original reproduction.
