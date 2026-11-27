@@ -1,0 +1,285 @@
+{
+  "cells": [
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 50
+      },
+      "level": "READ COMMITTED",
+      "mitigation": "none",
+      "outcome": "ANOMALY",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "REPEATABLE READ",
+      "mitigation": "none",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "SERIALIZABLE",
+      "mitigation": "none",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "READ COMMITTED",
+      "mitigation": "select_for_update",
+      "outcome": "SAFE",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "REPEATABLE READ",
+      "mitigation": "select_for_update",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "SERIALIZABLE",
+      "mitigation": "select_for_update",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "READ COMMITTED",
+      "mitigation": "atomic_update",
+      "outcome": "SAFE",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "REPEATABLE READ",
+      "mitigation": "atomic_update",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "expected_minor": 20,
+        "final_balance_minor": 20
+      },
+      "level": "SERIALIZABLE",
+      "mitigation": "atomic_update",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "lost_update"
+    },
+    {
+      "detail": {
+        "final_balances_minor": {
+          "a": -30,
+          "b": -30
+        },
+        "joint_total_minor": -60,
+        "rule": "a + b >= 0"
+      },
+      "level": "READ COMMITTED",
+      "mitigation": "none",
+      "outcome": "ANOMALY",
+      "scenario": "write_skew"
+    },
+    {
+      "detail": {
+        "final_balances_minor": {
+          "a": -30,
+          "b": -30
+        },
+        "joint_total_minor": -60,
+        "rule": "a + b >= 0"
+      },
+      "level": "REPEATABLE READ",
+      "mitigation": "none",
+      "outcome": "ANOMALY",
+      "scenario": "write_skew"
+    },
+    {
+      "detail": {
+        "final_balances_minor": {
+          "a": -30,
+          "b": 50
+        },
+        "joint_total_minor": 20,
+        "rule": "a + b >= 0"
+      },
+      "level": "SERIALIZABLE",
+      "mitigation": "none",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "write_skew"
+    },
+    {
+      "detail": {
+        "final_balances_minor": {
+          "a": -30,
+          "b": 50
+        },
+        "joint_total_minor": 20,
+        "rule": "a + b >= 0"
+      },
+      "level": "READ COMMITTED",
+      "mitigation": "lock_both_rows",
+      "outcome": "SAFE",
+      "scenario": "write_skew"
+    },
+    {
+      "detail": {
+        "final_balances_minor": {
+          "a": -30,
+          "b": 50
+        },
+        "joint_total_minor": 20,
+        "rule": "a + b >= 0"
+      },
+      "level": "REPEATABLE READ",
+      "mitigation": "lock_both_rows",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "write_skew"
+    },
+    {
+      "detail": {
+        "final_balances_minor": {
+          "a": -30,
+          "b": 50
+        },
+        "joint_total_minor": 20,
+        "rule": "a + b >= 0"
+      },
+      "level": "SERIALIZABLE",
+      "mitigation": "lock_both_rows",
+      "outcome": "ABORTED_RETRY_OK",
+      "scenario": "write_skew"
+    },
+    {
+      "detail": {
+        "first_read": 100,
+        "second_read": 70
+      },
+      "level": "READ COMMITTED",
+      "mitigation": "none",
+      "outcome": "ANOMALY",
+      "scenario": "non_repeatable_read"
+    },
+    {
+      "detail": {
+        "first_read": 100,
+        "second_read": 100
+      },
+      "level": "REPEATABLE READ",
+      "mitigation": "none",
+      "outcome": "SAFE",
+      "scenario": "non_repeatable_read"
+    },
+    {
+      "detail": {
+        "first_read": 100,
+        "second_read": 100
+      },
+      "level": "SERIALIZABLE",
+      "mitigation": "none",
+      "outcome": "SAFE",
+      "scenario": "non_repeatable_read"
+    },
+    {
+      "detail": {
+        "first_count": 2,
+        "second_count": 3
+      },
+      "level": "READ COMMITTED",
+      "mitigation": "none",
+      "outcome": "ANOMALY",
+      "scenario": "phantom_read"
+    },
+    {
+      "detail": {
+        "first_count": 2,
+        "second_count": 2
+      },
+      "level": "REPEATABLE READ",
+      "mitigation": "none",
+      "outcome": "SAFE",
+      "scenario": "phantom_read"
+    },
+    {
+      "detail": {
+        "first_count": 2,
+        "second_count": 2
+      },
+      "level": "SERIALIZABLE",
+      "mitigation": "none",
+      "outcome": "SAFE",
+      "scenario": "phantom_read"
+    }
+  ],
+  "provenance": {
+    "git_sha": "c9ef1a8e80b904636ec3850a59b77cca35baed44",
+    "git_tree": "c42465085ca57d0fbada48838183011f30364106",
+    "working_tree_clean": true
+  },
+  "real_post_journal": [
+    {
+      "amount_minor": 1000,
+      "expected_succeeded": 3,
+      "final_balance_minor": 0,
+      "funded_minor": 3000,
+      "invariant_holds": true,
+      "level": "READ COMMITTED",
+      "rejected_insufficient": 5,
+      "retries": 0,
+      "seconds": 0.113,
+      "succeeded": 3,
+      "workers": 8
+    },
+    {
+      "amount_minor": 1000,
+      "expected_succeeded": 3,
+      "final_balance_minor": 0,
+      "funded_minor": 3000,
+      "invariant_holds": true,
+      "level": "REPEATABLE READ",
+      "rejected_insufficient": 5,
+      "retries": 18,
+      "seconds": 0.261,
+      "succeeded": 3,
+      "workers": 8
+    },
+    {
+      "amount_minor": 1000,
+      "expected_succeeded": 3,
+      "final_balance_minor": 0,
+      "funded_minor": 3000,
+      "invariant_holds": true,
+      "level": "SERIALIZABLE",
+      "rejected_insufficient": 5,
+      "retries": 18,
+      "seconds": 0.332,
+      "succeeded": 3,
+      "workers": 8
+    }
+  ],
+  "server_version": "17.11"
+}
