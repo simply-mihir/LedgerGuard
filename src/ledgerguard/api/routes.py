@@ -56,6 +56,7 @@ from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.idempotency import IdempotencyConflictError
 from ledgerguard.domain.models import AccountStatus
 from ledgerguard.domain.money import AmountPaise
+from ledgerguard.domain.templates import TemplateValidationError
 from ledgerguard.participant.account_service import (
     AccountLifecycleError,
     AccountNotFoundError,
@@ -363,10 +364,8 @@ def fund_account(
         return {"status": "POSTED", "result": result}
     except IdempotencyConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except PostingError as exc:
-        raise HTTPException(
-            status_code=422, detail=str(exc)
-        ) from exc
+    except (PostingError, TemplateValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/cash-outs", status_code=status.HTTP_201_CREATED)
@@ -389,10 +388,8 @@ def cash_out(
         return {"status": "POSTED", "result": result}
     except IdempotencyConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except PostingError as exc:
-        raise HTTPException(
-            status_code=422, detail=str(exc)
-        ) from exc
+    except (PostingError, TemplateValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

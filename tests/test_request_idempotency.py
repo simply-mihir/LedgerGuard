@@ -115,3 +115,29 @@ def test_runtime_role_cannot_delete_or_rewrite_claims() -> None:
                     "UPDATE request_idempotency SET idempotency_key = 'x'"):
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 c.execute(sql)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("path", ["/v1/funding", "/v1/cash-outs"])
+def test_posting_to_an_unknown_account_is_a_client_error_not_a_500(path: str) -> None:
+    for ghost in (uuid4(), UUID(int=0)):
+        r = _post(path, f"ghost-{uuid4()}", account_id=str(ghost), amount_minor=100)
+        assert r.status_code == 422, r.text
+        assert "not found" in r.json()["detail"].lower()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("amount", ["100", True, 1.5, None])
+def test_amount_must_be_a_real_integer(amount: object) -> None:
+    r = _post("/v1/funding", f"strict-{uuid4()}", account_id=str(_acct()), amount_minor=amount)
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.integration
+def test_currency_must_be_an_uppercase_iso_code() -> None:
+    a, b = _acct(), _acct()
+    for bad in ("inr", "IN", "INRX", "1NR"):
+        r = client.post("/v1/transfers", headers={**H, "Idempotency-Key": f"cur-{uuid4()}"},
+                        json={"source_account_id": str(a), "destination_account_id": str(b),
+                              "amount_minor": 1, "currency": bad})
+        assert r.status_code == 422, (bad, r.text)

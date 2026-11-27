@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from ledgerguard.domain.models import AccountStatus, PostingSide
 
@@ -23,7 +23,7 @@ class CustomerResponse(BaseModel):
 
 class CreateAccountRequest(BaseModel):
     customer_id: UUID | None = None
-    currency: str = Field(default="INR", max_length=3)
+    currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
     name: str | None = None
 
 
@@ -60,14 +60,14 @@ class StatementResponse(BaseModel):
 
 class FundingRequest(BaseModel):
     account_id: UUID
-    amount_minor: int = Field(..., gt=0, le=100_000_000_000)
+    amount_minor: StrictInt = Field(..., gt=0, le=100_000_000_000)
     correlation_id: str | None = None
     description: str | None = None
 
 
 class CashOutRequest(BaseModel):
     account_id: UUID
-    amount_minor: int = Field(..., gt=0, le=100_000_000_000)
+    amount_minor: StrictInt = Field(..., gt=0, le=100_000_000_000)
     correlation_id: str | None = None
     description: str | None = None
 
@@ -75,8 +75,8 @@ class CashOutRequest(BaseModel):
 class TransferRequest(BaseModel):
     source_account_id: UUID
     destination_account_id: UUID
-    amount_minor: int = Field(..., gt=0, le=100_000_000_000)
-    currency: str = Field(default="INR", max_length=3)
+    amount_minor: StrictInt = Field(..., gt=0, le=100_000_000_000)
+    currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
     correlation_id: str | None = None
     description: str | None = None
 
