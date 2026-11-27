@@ -1,17 +1,17 @@
 {
   "source": {
-    "git_sha": "c9f57c676ed7d61700dd47a6c85f273f9144c76c",
-    "git_tree": "e7ab493fee3dfce4d5a78fca1576909f73e8f369",
-    "working_tree_clean": false
+    "git_sha": "dc7fe2c6192a02b32464913eac2abebf7f48e32f",
+    "git_tree": "6111bbd30d2b95765391324ba4e76960e4b1c603",
+    "working_tree_clean": true
   },
-  "transfers_checked": 7557,
+  "transfers_checked": 7751,
   "by_final_state": {
-    "SETTLED": 7381,
-    "CANCELLED": 176
+    "SETTLED": 7567,
+    "CANCELLED": 184
   },
   "non_conforming": [],
   "orphan_participant_transfers": {
-    "ledger-1": 244,
-    "ledger-2": 174
+    "ledger-1": 255,
+    "ledger-2": 181
   }
 }
