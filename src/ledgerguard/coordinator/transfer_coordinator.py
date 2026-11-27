@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 from ledgerguard.coordinator.directory_service import get_account_routing
 from ledgerguard.coordinator.failpoints import FailpointManager
 from ledgerguard.coordinator.failpoints import failpoints as default_failpoints
+from ledgerguard.coordinator.idempotent_transfer import insert_or_adopt_transfer, wait_for_outcome
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.idempotency import IdempotencyConflictError, compute_payload_hash
 from ledgerguard.domain.money import AmountPaise
@@ -105,39 +106,34 @@ def _submit_coordinator_transfer_inner(
         else "CROSS_LEDGER"
     )
 
-    # 3. Insert transfer in ACCEPTED state
-    with get_db_connection(coord_db_url) as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO transfers (
-                    transfer_id, idempotency_key, source_account_id, destination_account_id,
-                    amount_minor, currency, transfer_type, state,
-                    source_ledger_id, destination_ledger_id
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'ACCEPTED', %s, %s)
-                ON CONFLICT (transfer_id) DO NOTHING;
-            """,
-                (
-                    t_id,
-                    idempotency_key,
-                    source_account_id,
-                    destination_account_id,
-                    amount.paise,
-                    currency,
-                    transfer_type,
-                    source_routing["ledger_id"],
-                    dest_routing["ledger_id"],
-                ),
-            )
-        conn.commit()
-
-    # 4. Execute TCC orchestration
-    result = execute_two_phase_commit(
+    # 3. Insert the transfer, or adopt the one that already owns this idempotency key. The
+    #    database serialises concurrent duplicates, so a key can never settle twice.
+    transfer_row, disposition = insert_or_adopt_transfer(
         coord_db_url,
-        t_id,
-        ledger_db_urls,
-        failpoint_mgr=failpoint_mgr or default_failpoints,
+        transfer_id=t_id,
+        idempotency_key=idempotency_key,
+        source_account_id=source_account_id,
+        destination_account_id=destination_account_id,
+        amount_minor=amount.paise,
+        currency=currency,
+        transfer_type=transfer_type,
+        source_ledger_id=source_routing["ledger_id"],
+        destination_ledger_id=dest_routing["ledger_id"],
     )
+    t_id = UUID(str(transfer_row["transfer_id"]))
+
+    # 4. Execute TCC orchestration - only for the request that owns the transfer. A request that
+    #    adopted another request's transfer waits for its outcome instead of racing it.
+    result: dict[str, Any]
+    if disposition == "adopted":
+        result = wait_for_outcome(coord_db_url, t_id)
+    else:
+        result = execute_two_phase_commit(
+            coord_db_url,
+            t_id,
+            ledger_db_urls,
+            failpoint_mgr=failpoint_mgr or default_failpoints,
+        )
 
     response_payload = {
         "transfer_id": str(t_id),

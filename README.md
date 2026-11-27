@@ -369,7 +369,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 257 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 291 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
 - **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
@@ -442,6 +442,8 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_isolation_study.py`](tests/test_isolation_study.py) | 6 | Deterministic two-session reproduction of lost update, write skew, non-repeatable read and phantom at READ COMMITTED / REPEATABLE READ / SERIALIZABLE, plus the real `post_journal` under concurrent overdraft at all three levels. |
 | [`tests/test_db_timeouts.py`](tests/test_db_timeouts.py) | 9 | Pooled connections carry lock/statement/idle-in-transaction limits; a stuck lock fails fast as 55P03 and commits nothing; lock timeouts are retried until the holder releases (applied exactly once); statement timeouts are not retried; an idle-in-transaction session is terminated and frees its locks; the API answers 503 without leaking. |
 | [`tests/test_row_level_security.py`](tests/test_row_level_security.py) | 12 | A customer-scoped session sees only its own accounts, balances, journal lines and headers; counterparty lines are hidden on shared journals; unset/empty/unknown scope returns nothing and a malformed one errors; the role is read-only, NOLOGIN and confined to five tables; scope does not outlive the transaction; `ledgerguard_app` and `ledgerguard_reporter` are unchanged; the documented self-rescope limit. |
+| [`tests/test_query_plans.py`](tests/test_query_plans.py) | 29 | 18 hot queries planned at volume must use their intended index with no sequential scan; the catalogued SQL still exists in source; dropping each added index degrades to a sequential scan; no redundant indexes in any database; the redundant-index detector flags duplicates and prefixes. |
+| [`tests/test_idempotent_transfer_race.py`](tests/test_idempotent_transfer_race.py) | 5 | Eight concurrent submits with one idempotency key settle exactly one transfer (single debit/credit, identical receipts, reconciliation and hash chains pass); replay returns the same receipt; a changed payload is a conflict; the database itself rejects a second transfer row for a claimed key. |
 | [`tests/test_benchmark_stats.py`](tests/test_benchmark_stats.py) | 4 | Confidence-interval and distinguishability helpers for the benchmarks. |
 | [`tests/test_protocol_comparison.py`](tests/test_protocol_comparison.py) | 6 | TCC vs XA two-phase commit vs Saga on real PostgreSQL: crash windows, atomicity, bystander blocking. |
 | [`tests/test_real_fault_injection.py`](tests/test_real_fault_injection.py) | 21 | SIGKILL of worker/API/PostgreSQL, TCP latency/partition/reset/corruption/reorder/truncation proxy, post-recovery invariants (container scenarios opt-in). |
@@ -454,7 +456,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
 | [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **259** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **293** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 
