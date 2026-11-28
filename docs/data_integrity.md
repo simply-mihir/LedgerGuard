@@ -50,9 +50,10 @@ damaged value. A second test asserts all three compose services carry the flag.
 
 Limits and operations:
 
-* It applies to **new volumes**. Existing development volumes remain unprotected until recreated
-  (`docker compose down -v`, which destroys their data) or converted offline with
-  `pg_checksums --enable` while the server is stopped. CI always creates fresh volumes.
+* Compose enables it at `initdb`, so it applies to **new volumes** (CI always creates fresh ones). The
+  maintainer's three existing development volumes were converted offline with `pg_checksums --enable` after
+  a clean stop; `tests/test_data_checksums.py` asserts the running databases report `data_checksums = on`
+  with zero failures. Any other pre-existing volume needs the same conversion (or recreation).
 * Checksums **detect** corruption on read; they do not repair it, and a page that is never read is
   never checked. Backups and `pg_checksums --check` (offline) or `pg_amcheck` find the rest.
 * This exercises corruption of an on-disk page, not fsync failure or torn writes (still untested).

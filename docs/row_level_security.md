@@ -41,13 +41,15 @@ with psycopg.connect(url) as conn:
 
 `SET LOCAL` and `set_config(..., true)` end with the transaction, so a pooled connection cannot
 carry a scope or the reduced role into its next use. The role is NOLOGIN: an operator must
-`GRANT ledgerguard_customer_reader TO <trusted connector login>`. The migration grants it to no one.
+`GRANT ledgerguard_customer_reader TO <trusted connector login>`. Migration `ledger/017` grants it to `ledgerguard_app` only.
 
 ## Limits — read these
 
-* **Not wired into the API.** No endpoint uses it today; operators authenticate to the console, not
-  customers. This is a database-enforced boundary ready for customer-facing reads, a BI replica or
-  an export job.
+* **Wired into one endpoint.** `GET /v1/customers/{customer_id}/accounts` reads each ledger through
+  `customer_scoped_transaction` (query in `participant/customer_view.py`, which carries no customer filter of
+  its own). `ledger/017` grants `ledgerguard_app` membership of the reader role so a transaction can drop to
+  it. Other endpoints remain operator-level; there is still no customer login, so the endpoint is reached with
+  the operator bearer token.
 * **The scope is a session setting.** Anyone who can run arbitrary SQL as that role can re-scope
   itself (a test documents this). RLS here defends against bugs and SQL injection in the *query
   layer*, not against a malicious holder of a login granted the role. Grant membership only to

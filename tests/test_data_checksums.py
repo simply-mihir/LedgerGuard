@@ -30,3 +30,15 @@ def test_corruption_is_detected_with_checksums_and_silent_without() -> None:
     # The control: the same flipped bytes are returned to the caller as if they were correct.
     assert unprotected.silently_wrong, unprotected
     assert unprotected.value_read is not None and "XXXX" in unprotected.value_read
+
+
+def test_the_running_dev_databases_have_page_checksums_and_no_failures() -> None:
+    import psycopg
+
+    from ledgerguard.config import settings
+
+    for url in (settings.coordinator_admin_db_url, settings.ledger1_admin_db_url, settings.ledger2_admin_db_url):
+        with psycopg.connect(url) as c:
+            assert c.execute("SHOW data_checksums").fetchone()[0] == "on"  # type: ignore[index]
+            failures = c.execute("SELECT COALESCE(SUM(checksum_failures), 0) FROM pg_stat_database").fetchone()[0]  # type: ignore[index]
+            assert failures == 0

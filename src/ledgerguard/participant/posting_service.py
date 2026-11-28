@@ -79,7 +79,7 @@ def post_journal_entry(
                 replay = request_idempotency.claim(conn, scope, key, payload)
                 if replay is not None:
                     conn.rollback()  # nothing was written; release the connection cleanly
-                    return replay
+                    return {**replay, "idempotent_replay": True}
             cur2: Any
             with conn.cursor(row_factory=dict_row) as cur2:
                 cur2.execute(

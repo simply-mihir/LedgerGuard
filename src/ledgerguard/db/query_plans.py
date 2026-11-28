@@ -71,11 +71,13 @@ CATALOG: tuple[HotQuery, ...] = (
        "Replaces an unindexed scan of transfers by key."),
     _q(COORD, "open_transfer_recovery_sweep",
        "SELECT transfer_id, state FROM transfers "
-       "WHERE state IN ('ACCEPTED', 'PREPARING', 'COMMITTING', 'CANCELLING') ORDER BY created_at ASC",
-       (), "transfers", "idx_transfers_open_created",
+       "WHERE state IN ('ACCEPTED', 'PREPARING', 'COMMITTING', 'CANCELLING') "
+       "AND updated_at <= NOW() - make_interval(secs => %s) ORDER BY created_at ASC",
+       (0.0,), "transfers", "idx_transfers_open_created",
        "src/ledgerguard/worker/orchestrator.py",
-       "WHERE state IN ('ACCEPTED', 'PREPARING', 'COMMITTING', 'CANCELLING') ORDER BY created_at ASC",
-       "Reads only unfinished transfers, independent of how many have settled."),
+       "WHERE state IN ('ACCEPTED', 'PREPARING', 'COMMITTING', 'CANCELLING') "
+       "AND updated_at <= NOW() - make_interval(secs => %s) ORDER BY created_at ASC",
+       "Reads only unfinished transfers, independent of how many have settled; the age filter is applied after the index."),
     _q(COORD, "operator_transfer_list",
        "SELECT t.transfer_id, d.decision FROM transfers t "
        "LEFT JOIN transfer_decisions d ON t.transfer_id = d.transfer_id "

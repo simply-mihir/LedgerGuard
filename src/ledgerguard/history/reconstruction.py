@@ -161,6 +161,39 @@ def _line_delta(account_type: str, side: str, amount_minor: int) -> int:
     return amount_minor if side == "DEBIT" else -amount_minor
 
 
+def select_as_of_prefix(
+    lines: list[dict[str, Any]], acct_type: str, as_of_utc: datetime
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    """Split an account's lines (already in account-sequence order) into those "as of T" and the rest.
+
+    "As of T" is a *prefix* of the sequence: inclusion stops at the first line stamped after T. A wall-clock
+    step backwards can stamp a later entry earlier than T while an earlier entry is stamped after it;
+    including the later one alone would show a balance that never existed.
+    Returns ``(included, excluded, posted_balance_delta)``.
+    """
+    included: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+    posted = 0
+    in_prefix = True
+    for ln in lines:
+        ts = ln["created_at"].astimezone(UTC)
+        entry = {
+            "journal_id": str(ln["journal_id"]),
+            "sequence_number": ln["sequence_number"],
+            "operation_type": ln["operation_type"],
+            "side": ln["side"],
+            "amount_minor": int(ln["amount_minor"]),
+            "created_at": ts.isoformat(),
+        }
+        in_prefix = in_prefix and ts <= as_of_utc
+        if in_prefix:
+            posted += _line_delta(acct_type, str(ln["side"]), int(ln["amount_minor"]))
+            included.append(entry)
+        else:
+            excluded.append(entry)
+    return included, excluded, posted
+
+
 def reconstruct_account_balance_as_of(
     ledger_db_url: str,
     account_id: UUID,
@@ -200,7 +233,8 @@ def reconstruct_account_balance_as_of(
                 FROM journal_lines l
                 JOIN journal_headers h ON l.journal_id = h.journal_id
                 WHERE l.account_id = %s
-                ORDER BY h.created_at ASC, h.sequence_number ASC NULLS LAST, h.journal_id ASC, l.line_no ASC;
+                ORDER BY l.account_sequence ASC NULLS LAST, h.sequence_number ASC NULLS LAST, h.created_at ASC,
+                         h.journal_id ASC, l.line_no ASC;
                 """,
                 (account_id,),
             )
@@ -244,24 +278,7 @@ def reconstruct_account_balance_as_of(
     held_at_t = sum(int(h["amount_minor"]) for h in active_holds)
 
     # Full replay baseline (used for verification & fallback)
-    included: list[dict[str, Any]] = []
-    excluded: list[dict[str, Any]] = []
-    full_posted = 0
-    for ln in all_lines:
-        ts = ln["created_at"].astimezone(UTC)
-        entry_dict = {
-            "journal_id": str(ln["journal_id"]),
-            "sequence_number": ln["sequence_number"],
-            "operation_type": ln["operation_type"],
-            "side": ln["side"],
-            "amount_minor": int(ln["amount_minor"]),
-            "created_at": ts.isoformat(),
-        }
-        if ts <= as_of_utc:
-            full_posted += _line_delta(acct_type, str(ln["side"]), int(ln["amount_minor"]))
-            included.append(entry_dict)
-        else:
-            excluded.append(entry_dict)
+    included, excluded, full_posted = select_as_of_prefix(all_lines, acct_type, as_of_utc)
 
     snapshot_meta: SnapshotMetadata | None = None
     verification_status = "VERIFIED"

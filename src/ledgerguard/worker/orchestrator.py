@@ -425,6 +425,7 @@ def recover_pending_transfers(
     coord_db_url: str,
     ledger_db_urls: dict[str, str],
     transfer_id: UUID | None = None,
+    min_age_seconds: float = 0.0,
 ) -> list[dict[str, Any]]:
     """Scan and recover in-flight or interrupted transfers.
 
@@ -436,7 +437,7 @@ def recover_pending_transfers(
         with singleton(coord_db_url, RECOVERY_SWEEP_LOCK) as acquired:
             if not acquired:
                 return []
-            return _recover_pending_transfers(coord_db_url, ledger_db_urls, None)
+            return _recover_pending_transfers(coord_db_url, ledger_db_urls, None, min_age_seconds)
     return _recover_pending_transfers(coord_db_url, ledger_db_urls, transfer_id)
 
 
@@ -447,6 +448,7 @@ def _recover_pending_transfers(
     coord_db_url: str,
     ledger_db_urls: dict[str, str],
     transfer_id: UUID | None,
+    min_age_seconds: float = 0.0,
 ) -> list[dict[str, Any]]:
     results = []
     with get_db_connection(coord_db_url) as conn:
@@ -466,8 +468,10 @@ def _recover_pending_transfers(
                     SELECT transfer_id, state
                     FROM transfers
                     WHERE state IN ('ACCEPTED', 'PREPARING', 'COMMITTING', 'CANCELLING')
+                      AND updated_at <= NOW() - make_interval(secs => %s)
                     ORDER BY created_at ASC;
-                """
+                """,
+                    (min_age_seconds,),
                 )
             pending = cur.fetchall()
 

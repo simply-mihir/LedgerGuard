@@ -18,11 +18,11 @@ EXPECTED = {
     settings.ledger1_admin_db_url: {
         "journal_headers_currency_format": True, "local_transfers_currency_format": True,
         "transfer_intents_currency_format": True, "transfer_reversals_amount_positive": True,
-        "ledger_accounts_currency_format": None},  # NOT VALID: legacy dev rows tolerated, new rows enforced
+        "ledger_accounts_currency_format": True},
     settings.ledger2_admin_db_url: {
         "journal_headers_currency_format": True, "local_transfers_currency_format": True,
         "transfer_intents_currency_format": True, "transfer_reversals_amount_positive": True,
-        "ledger_accounts_currency_format": None},
+        "ledger_accounts_currency_format": True},
 }
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -23,7 +24,9 @@ CUSTOMER_READER_ROLE = "ledgerguard_customer_reader"
 
 
 @contextmanager
-def customer_scoped_transaction(conn: psycopg.Connection, customer_id: UUID) -> Iterator[psycopg.Connection]:
+def customer_scoped_transaction(
+    conn: psycopg.Connection[Any], customer_id: UUID
+) -> Iterator[psycopg.Connection[Any]]:
     """Run one transaction as the customer reader, scoped to ``customer_id``.
 
     ``SET LOCAL`` and ``set_config(..., true)`` last only until the transaction ends, so a pooled

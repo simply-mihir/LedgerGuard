@@ -222,6 +222,24 @@ def cmd_verify_journal_checkpoint(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_run_worker(args: argparse.Namespace) -> None:
+    import signal
+    import threading
+
+    from ledgerguard.worker.daemon import run_worker
+
+    stop = threading.Event()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: stop.set())
+    sweeps = run_worker(
+        settings.coordinator_db_url,
+        {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url},
+        stop,
+        poll_interval_s=max(settings.worker_poll_interval_ms / 1000.0, 1.0),
+    )
+    print(f"worker stopped after {sweeps} sweeps")
+
+
 def cmd_verify_all_ledgers(args: argparse.Namespace) -> None:
     """Verify hash chains across all participant ledgers."""
     import json
@@ -317,6 +335,11 @@ def main() -> None:
 
     val_parser = subparsers.add_parser("verify-all-ledgers", help="Verify hash chains across all ledgers")
     val_parser.set_defaults(func=cmd_verify_all_ledgers)
+
+    worker_parser = subparsers.add_parser(
+        "run-worker", help="Run the always-on recovery worker (wakes on outbox NOTIFY, polls as fallback)"
+    )
+    worker_parser.set_defaults(func=cmd_run_worker)
 
     args = parser.parse_args()
     args.func(args)

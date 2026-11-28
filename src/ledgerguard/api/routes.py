@@ -5,7 +5,7 @@ import logging
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -65,6 +65,7 @@ from ledgerguard.participant.account_service import (
     get_statement,
     set_account_status,
 )
+from ledgerguard.participant.customer_view import list_customer_accounts
 from ledgerguard.participant.posting_service import (
     PostingError,
     simulate_cash_out,
@@ -162,6 +163,19 @@ def create_customer(req: CreateCustomerRequest, _: None = Depends(verify_bearer_
         status=row["status"],
         created_at=row["created_at"],
     )
+
+
+@router.get("/customers/{customer_id}/accounts")
+def get_customer_accounts(
+    customer_id: UUID,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """A customer's accounts across every ledger, read under database row-level security."""
+    accounts: list[dict[str, Any]] = []
+    for ledger_id, url in (("ledger-1", settings.ledger1_db_url), ("ledger-2", settings.ledger2_db_url)):
+        for row in list_customer_accounts(url, customer_id):
+            accounts.append({"ledger_id": ledger_id, **row})
+    return {"customer_id": str(customer_id), "accounts": accounts}
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +361,7 @@ def close_account(
 @router.post("/funding", status_code=status.HTTP_201_CREATED)
 def fund_account(
     req: FundingRequest,
+    response: Response,
     idempotency_key: str = Depends(require_idempotency_key),
     _: None = Depends(verify_bearer_token),
 ) -> dict[str, Any]:
@@ -361,6 +376,8 @@ def fund_account(
             description=req.description,
             idempotency_key=idempotency_key,
         )
+        if result.pop("idempotent_replay", False):
+            response.headers["Idempotent-Replayed"] = "true"
         return {"status": "POSTED", "result": result}
     except IdempotencyConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -371,6 +388,7 @@ def fund_account(
 @router.post("/cash-outs", status_code=status.HTTP_201_CREATED)
 def cash_out(
     req: CashOutRequest,
+    response: Response,
     idempotency_key: str = Depends(require_idempotency_key),
     _: None = Depends(verify_bearer_token),
 ) -> dict[str, Any]:
@@ -385,6 +403,8 @@ def cash_out(
             description=req.description,
             idempotency_key=idempotency_key,
         )
+        if result.pop("idempotent_replay", False):
+            response.headers["Idempotent-Replayed"] = "true"
         return {"status": "POSTED", "result": result}
     except IdempotencyConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

@@ -13,10 +13,13 @@ role one database-side definition of balances and open work. All are `security_i
 own privileges and row-level-security apply; the reporter has SELECT only. Tests compare the views with the
 raw lines and with the ledger's `account_balances`.
 
-## Outbox LISTEN/NOTIFY (`coordinator/013`, `worker.outbox.wait_for_outbox_work`)
+## Outbox LISTEN/NOTIFY and the recovery worker (`coordinator/013`, `worker/outbox.py`, `worker/daemon.py`)
 A statement-level trigger issues `pg_notify('outbox_ready')` on insert. NOTIFY is transactional, so a
-rolled-back enqueue never wakes anyone. The notification is a hint only: consumers still claim work with
-`FOR UPDATE SKIP LOCKED` and must keep a timed poll as fallback, since notifications are lost when nobody
-listens or the server restarts. Honest scope: the repository has no always-on outbox consumer loop (the
-workflow drives claims directly), so this provides and tests the wake-up primitive; it is not yet wired
-into a daemon.
+rolled-back enqueue never wakes anyone. The notification is a hint only. `uv run python -m ledgerguard.cli
+run-worker` runs the always-on worker: it holds one LISTEN connection (`OutboxListener`), lets new work age past
+`min_age_seconds` (so it does not race a request still executing inline), then runs the idempotent recovery
+sweep; the same sweep also runs on a poll timer, so correctness never depends on a notification (they are lost
+when nobody listens or the server restarts). The sweep is a cluster-wide singleton (advisory lock). Only
+classified transient database failures are retried; anything else stops the worker.
+`tests/test_worker_daemon.py` shows a crashed cross-ledger transfer recovered to SETTLED within seconds with a
+60 s poll interval, i.e. woken by NOTIFY, and with exactly one debit.

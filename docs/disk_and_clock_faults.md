@@ -44,15 +44,28 @@ lease and the failure backoff are now computed in the database, and a test fails
 imports `datetime` or `time` again.
 `tests/test_clock_faults.py` includes a control showing the old failure mode.
 
+## WAL exhaustion, clock steps and application clocks
+
+* **WAL volume exhaustion** (`faults/wal_full.py`, `tests/test_wal_full.py`): `pg_wal` on a 48 MB tmpfs with
+  archiving failing. Writes fail with SQLSTATE 53100 `could not write to file pg_wal/...`, classified as an
+  infrastructure failure (HTTP 503), and the server then stops because PostgreSQL cannot continue without
+  WAL space. Restart recovery after exhaustion is *not* examined: a tmpfs is erased when the container stops.
+* **Database-host clock steps**: `reconstruct_account_balance_as_of` now treats "as of T" as a *prefix* of the
+  account's sequence (`history.reconstruction.select_as_of_prefix`); a backwards step can no longer yield a
+  balance that never existed. The step itself cannot be injected into a container without moving the host's
+  clock, so the rule is tested with synthetic non-monotonic timestamps.
+* **Application wall clocks**: sessions (creation, absolute and idle expiry), login and MFA lockouts,
+  enrollment expiry and approval expiry are all measured by the database clock
+  (`tests/test_auth_clock_skew.py`, `tests/test_clock_faults.py`: sessions stay valid with the process clock
+  set ten years either way). Two mechanisms are inherently wall-clock and are tested for tolerance instead:
+  TOTP codes (RFC 6238, fixed drift window) and the signed five-minute MFA temp token (tolerates two minutes
+  of skew, fails closed at an hour).
+
 ## Not covered
 
-* **fsync failure and torn writes** need block-layer fault injection (dm-flakey or similar), which a
-  container cannot provide portably. PostgreSQL's own protection (full-page writes, checksums, PANIC on
-  fsync failure) is relied on, not tested.
-* **WAL volume exhaustion** makes PostgreSQL PANIC and run crash recovery; the test fills only the data
-  tablespace. The existing `postgres_crash` scenario covers recovery after a crash.
-* **Clock skew in the database host itself** (NTP step backwards) was not injected. Hash-chain checks
-  do not depend on time order, but `reconstruct_account_balance_as_of` orders by `created_at` first, so
-  a backwards step would make as-of replays follow wall time, not sequence.
-* **Application wall-clock expiry** (tokens, approvals, lockouts) was inventoried but not tested under
-  skew; separate API instances with different clocks would disagree about expiry by that difference.
+* **fsync failure and torn writes** need block-layer fault injection (dm-flakey or similar), which a container
+  cannot provide portably. PostgreSQL's own protection (full-page writes, page checksums, PANIC on fsync
+  failure) is relied on; corruption *detection* is demonstrated in `docs/data_integrity.md`, fsync failure is not.
+* **Restart recovery after WAL exhaustion** (see above).
+* Separate API instances whose clocks differ still disagree about the TOTP window and the temp-token TTL by
+  that difference; every other expiry is database-measured.

@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -174,7 +174,8 @@ def authenticate_operator(
             cur.execute(
                 """
                 SELECT operator_id, username, email, password_hash,
-                       totp_secret, totp_enabled, role, failed_attempts, locked_until
+                       totp_secret, totp_enabled, role, failed_attempts, locked_until,
+                       COALESCE(locked_until > NOW(), FALSE) AS is_locked
                 FROM operators
                 WHERE LOWER(username) = %s OR LOWER(email) = %s
                 """,
@@ -183,7 +184,7 @@ def authenticate_operator(
             operator = cur.fetchone()
 
             # Account temporary lockout check (e.g. from MFA lockouts or admin suspension)
-            if operator and operator["locked_until"] and operator["locked_until"] > datetime.now(UTC):
+            if operator and operator["is_locked"]:
                 dummy_verify_password(password)
                 _record_login_attempt(cur, clean_identifier, ip_address, success=False, attempt_type="PASSWORD")
                 conn.commit()
@@ -405,6 +406,8 @@ def validate_session(raw_token: str) -> tuple[OperatorPublicInfo | None, str | N
             cur.execute(
                 """
                 SELECT s.session_token_hash, s.csrf_token, s.expires_at, s.idle_expires_at, s.last_seen_at,
+                       (s.expires_at <= NOW() OR s.idle_expires_at <= NOW()) AS is_expired,
+                       EXTRACT(EPOCH FROM (NOW() - s.last_seen_at)) AS seconds_since_seen,
                        o.operator_id, o.username, o.email, o.role, o.totp_enabled
                 FROM operator_sessions s
                 JOIN operators o ON s.operator_id = o.operator_id
@@ -416,15 +419,14 @@ def validate_session(raw_token: str) -> tuple[OperatorPublicInfo | None, str | N
             if not row:
                 return None, None
 
-            now = datetime.now(UTC)
-            # Absolute or idle expiration check
-            if row["expires_at"] <= now or row["idle_expires_at"] <= now:
+            # Absolute or idle expiration, judged on the database clock (the one that stamped the session)
+            if row["is_expired"]:
                 cur.execute("DELETE FROM operator_sessions WHERE session_token_hash = %s", (token_hash,))
                 conn.commit()
                 return None, None
 
             # Touch idle_expires_at and last_seen_at if more than 60s since last touch
-            if (now - row["last_seen_at"]).total_seconds() > 60:
+            if float(row["seconds_since_seen"]) > 60:
                 cur.execute(
                     """
                     UPDATE operator_sessions
@@ -559,8 +561,10 @@ def enroll_totp(
                 raise AuthenticationError("Operator account not found.")
 
             if op["totp_enabled"] and current_session_created_at is not None:
-                now = datetime.now(UTC)
-                if (now - current_session_created_at).total_seconds() > 300:
+                too_old = cur.execute(
+                    "SELECT NOW() - %s > INTERVAL '300 seconds' AS too_old", (current_session_created_at,)
+                ).fetchone()["too_old"]
+                if too_old:
                     raise AuthenticationError(
                         "Resetting MFA requires recent authentication. Please re-authenticate."
                     )
@@ -680,18 +684,14 @@ def _create_session(
     raw_session_token = secrets.token_urlsafe(48)  # 384 bits of entropy
     token_hash = _hash_token(raw_session_token)
     csrf_token = secrets.token_urlsafe(32)
-    now = datetime.now(UTC)
-    expires_at = now + timedelta(hours=duration_hours)
-    idle_expires_at = now + timedelta(minutes=idle_minutes)
-
     cur.execute(
         """
         INSERT INTO operator_sessions (
             session_token_hash, operator_id, csrf_token, ip_address, user_agent, expires_at, idle_expires_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, NOW() + make_interval(hours => %s), NOW() + make_interval(mins => %s))
         """,
-        (token_hash, operator_id, csrf_token, ip_address, user_agent, expires_at, idle_expires_at),
+        (token_hash, operator_id, csrf_token, ip_address, user_agent, duration_hours, idle_minutes),
     )
     return raw_session_token, csrf_token
 

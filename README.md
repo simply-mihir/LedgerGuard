@@ -369,7 +369,7 @@ The test suite validates accounting correctness, concurrency safety, failure rec
 
 ### Recorded Repository Baseline (Verified November 2026)
 
-- **Pytest Suite:** 489 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
+- **Pytest Suite:** 502 passing tests plus 2 opt-in container fault tests (`uv run pytest -ra -W error`)
 - **Linting:** Zero Ruff linter defects (`uv run ruff check .`)
 - **Type Checking:** Zero Mypy type violations across 76 source files (`uv run mypy src`)
 - **Frontend Unit Suite:** 48 passing tests across 19 suites (`npm test` in `apps/console`)
@@ -432,7 +432,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_dual_control_rbac.py`](tests/test_dual_control_rbac.py) | 4 | Four-eyes approvals, separation of duties, MFA and recent-auth rules. |
 | [`tests/test_durable_workflow.py`](tests/test_durable_workflow.py) | 7 | Transactional outbox polling via `SKIP LOCKED`, durable coordinator decisions, command inbox deduplication, holds reservation lifecycle. |
 | [`tests/test_evidence_provenance.py`](tests/test_evidence_provenance.py) | 3 | Evidence generators refuse dirty trees and record commit SHA, tree OID and clean-tree status. |
-| [`tests/test_history_reconstruction.py`](tests/test_history_reconstruction.py) | 4 | As-of-time balance reconstruction and checksummed snapshots. |
+| [`tests/test_history_reconstruction.py`](tests/test_history_reconstruction.py) | 5 | As-of-time balance reconstruction and checksummed snapshots. |
 | [`tests/test_local_transfers.py`](tests/test_local_transfers.py) | 9 | Atomic intra-ledger transfers, idempotency fingerprints, 100 concurrent race spends against balance limit, compensating reversals. |
 | [`tests/test_operator_api.py`](tests/test_operator_api.py) | 11 | REST API endpoints, system overview metrics (never PASS when a ledger cannot be read), workflow timeline inspection, public-safe experiment blocking (`403 Forbidden`). |
 | [`tests/test_operator_auth.py`](tests/test_operator_auth.py) | 16 | Argon2id verification, SHA-256 session token hashing, idle & absolute expiry, TOTP drift & replay rejection, rate limiting, CSRF and origin validation, proxy security. |
@@ -460,7 +460,7 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_tla_multi_transfer.py`](tests/test_tla_multi_transfer.py) | 2 | TLC model checking of the concurrent-transfer model; defective variant is refuted. |
 | [`tests/test_trace_conformance.py`](tests/test_trace_conformance.py) | 4 | Real workflow histories replayed against the TLA+ transition relation; mutation corpus; TLC cross-check. |
 | [`tests/test_state_machine_triggers.py`](tests/test_state_machine_triggers.py) | 75 | The database refuses illegal transfer, hold, intent and account transitions: full 7x7 transfer matrix with decision linkage, hold/intent matrices, immutable columns, creation in a later state, decision flip. |
-| [`tests/test_data_checksums.py`](tests/test_data_checksums.py) | 2 | Compose initialises all databases with `--data-checksums`; a throwaway pair shows flipped page bytes are detected with checksums and returned silently without. |
+| [`tests/test_data_checksums.py`](tests/test_data_checksums.py) | 3 | Compose initialises all databases with `--data-checksums`; a throwaway pair shows flipped page bytes are detected with checksums and returned silently without. |
 | [`tests/test_storage_tuning.py`](tests/test_storage_tuning.py) | 6 | Fillfactor/autovacuum parameters on the hot-update tables, default fillfactor kept on append-only journals, and a measurement that fillfactor 90 makes every balance update HOT without growing the table. |
 | [`tests/test_request_idempotency.py`](tests/test_request_idempotency.py) | 15 | Funding, cash-out and account creation honour `Idempotency-Key`: sequential and 8-way concurrent retries write once, a changed payload is `409`, a rejected request leaves no claim, the runtime role cannot delete or rewrite claims, an unknown account is `422` (never `500`), and `amount_minor`/currency reject coerced or malformed input. |
 | [`tests/test_participant_conformance.py`](tests/test_participant_conformance.py) | 28 | Each ledger's intent, hold and settlement journals must refine the specification state implied by the coordinator trace: exhaustive source/destination/hold state matrix for settled, cancelled and in-flight traces, every ledger-local rule's corruption detected, the ledger refuses tampering with real rows, and tampering that bypasses the triggers is still detected (rolled back), orphan participant state reported. |
@@ -472,8 +472,12 @@ cd apps/console && npm run build && cd ../..
 | [`tests/test_integrity_constraints.py`](tests/test_integrity_constraints.py) | 5 | The databases themselves refuse malformed currencies, a refund total above the transfer amount and non-positive reversal amounts; constraints exist and are validated where data allowed. |
 | [`tests/test_cors.py`](tests/test_cors.py) | 6 | Preflight succeeds with credentials only for trusted origins; look-alike, `null` and scheme-mismatched origins get no allow-origin header; wildcard origins cannot be configured. |
 | [`tests/test_advisory_singleton.py`](tests/test_advisory_singleton.py) | 4 | Session advisory-lock singletons: one holder, independent names, released when the holder is killed, and a global recovery sweep yields to a running one. |
+| [`tests/test_auth_clock_skew.py`](tests/test_auth_clock_skew.py) | 3 | Sessions stay valid with the process clock ten years ahead or behind (expiry is database-measured); the signed MFA temp token tolerates two minutes of skew and fails closed at an hour. |
+| [`tests/test_customer_accounts_endpoint.py`](tests/test_customer_accounts_endpoint.py) | 3 | `GET /v1/customers/{id}/accounts` reads through row-level security: each customer sees only their own accounts and balances, unknown customers see nothing, authentication required, and the query carries no customer filter of its own. |
+| [`tests/test_worker_daemon.py`](tests/test_worker_daemon.py) | 4 | The recovery worker sweeps on a timer, wakes on a committed outbox insert long before a 60 s poll, retries transient database failures but surfaces others, and forward-recovers a crashed cross-ledger transfer with exactly one debit. |
+| [`tests/test_wal_full.py`](tests/test_wal_full.py) | 1 | A full `pg_wal` volume fails writes with 53100, classified as infrastructure (503); the server stops and says why. |
 | [`tests/test_tracing.py`](tests/test_tracing.py) | 2 | End-to-end OpenTelemetry tracing and sensitive-data redaction. |
-| **Total** | **491** | **100% passing** (2 container fault tests are opt-in) |
+| **Total** | **504** | **100% passing** (2 container fault tests are opt-in) |
 
 ---
 

@@ -136,15 +136,37 @@ def mark_outbox_failed(
 OUTBOX_CHANNEL = "outbox_ready"
 
 
-def wait_for_outbox_work(db_url: str, timeout_seconds: float) -> bool:
-    """Block until a new outbox event is committed or ``timeout_seconds`` passes.
+class OutboxListener:
+    """Holds one LISTEN connection so no notification is missed between waits.
 
-    Returns True when woken by a notification, False on timeout. A notification is only a hint:
-    callers must still claim work from the table, and must keep polling on a timer because a
-    notification sent while nobody listens (or across a server restart) is lost.
+    Use as a context manager. ``wait`` returns True when woken by a committed outbox insert and False on
+    timeout. A wake-up is only a hint: callers must still claim work from the table and keep polling on a
+    timer, because a notification sent before LISTEN started (or across a server restart) is lost.
     """
-    with psycopg.connect(db_url, autocommit=True) as conn:
-        conn.execute(f"LISTEN {OUTBOX_CHANNEL}")
-        for _ in conn.notifies(timeout=timeout_seconds, stop_after=1):
-            return True
-    return False
+
+    def __init__(self, db_url: str) -> None:
+        self._db_url = db_url
+        self._conn: psycopg.Connection[Any] | None = None
+
+    def __enter__(self) -> "OutboxListener":
+        self._conn = psycopg.connect(self._db_url, autocommit=True)
+        self._conn.execute(f"LISTEN {OUTBOX_CHANNEL}")
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+    def wait(self, timeout_seconds: float) -> bool:
+        assert self._conn is not None, "use OutboxListener as a context manager"
+        woken = False
+        for _ in self._conn.notifies(timeout=timeout_seconds, stop_after=1):
+            woken = True
+        return woken
+
+
+def wait_for_outbox_work(db_url: str, timeout_seconds: float) -> bool:
+    """One-shot wait; see :class:`OutboxListener` for the long-lived form a worker should use."""
+    with OutboxListener(db_url) as listener:
+        return listener.wait(timeout_seconds)

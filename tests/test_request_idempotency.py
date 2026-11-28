@@ -43,6 +43,8 @@ def test_funding_retry_with_the_same_key_credits_once_and_replays_the_result() -
     results = [_post("/v1/funding", key, account_id=str(a), amount_minor=1000) for _ in range(3)]
     assert [r.status_code for r in results] == [201, 201, 201]
     assert results[0].json() == results[1].json() == results[2].json()
+    assert "idempotent-replayed" not in results[0].headers, "the first request is not a replay"
+    assert results[1].headers["idempotent-replayed"] == results[2].headers["idempotent-replayed"] == "true"
     assert _balance(a) == 1000
     assert _journals_for(key) == 1
 

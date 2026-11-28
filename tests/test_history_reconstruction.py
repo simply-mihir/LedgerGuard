@@ -99,3 +99,24 @@ def test_clearing_as_of_incomplete_when_db_unreachable() -> None:
         datetime.now(UTC),
     )
     assert rep.status == "INCOMPLETE"
+
+
+def test_as_of_selection_is_a_sequence_prefix_even_if_the_clock_stepped_backwards() -> None:
+    """Entries 1,2,3 are stamped 10:00, 10:30, 10:10: entry 3 was written after a backwards clock step."""
+    from ledgerguard.history.reconstruction import select_as_of_prefix
+
+    def line(seq: int, minute: int, side: str, amount: int) -> dict:
+        return {"journal_id": f"j{seq}", "sequence_number": seq, "operation_type": "FUNDING", "side": side,
+                "amount_minor": amount, "created_at": datetime(2026, 1, 1, 10, minute, tzinfo=UTC)}
+
+    lines = [line(1, 0, "CREDIT", 1_000), line(2, 30, "CREDIT", 500), line(3, 10, "CREDIT", 200)]
+    t = datetime(2026, 1, 1, 10, 20, tzinfo=UTC)  # between entry 1 and entry 2
+    included, excluded, posted = select_as_of_prefix(lines, "LIABILITY", t)
+    assert [e["journal_id"] for e in included] == ["j1"]
+    assert [e["journal_id"] for e in excluded] == ["j2", "j3"], "j3 is stamped before T but follows j2"
+    assert posted == 1_000, "never 1,200: that balance (j1 + j3 without j2) never existed"
+
+    # with a monotonic clock the selection is exactly the old time filter
+    mono = [line(1, 0, "CREDIT", 1_000), line(2, 10, "CREDIT", 500), line(3, 30, "CREDIT", 200)]
+    inc, exc, bal = select_as_of_prefix(mono, "LIABILITY", t)
+    assert [e["journal_id"] for e in inc] == ["j1", "j2"] and bal == 1_500 and len(exc) == 1
