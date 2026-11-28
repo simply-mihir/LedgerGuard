@@ -144,3 +144,10 @@ def test_operator_overview_marks_itself_complete_when_everything_is_readable():
     data = client.get("/v1/operator/overview", headers=AUTH_HEADERS).json()
     assert data["counts_complete"] is True and data["clearing_complete"] is True
     assert data["last_reconciliation_status"] in ("PASS", "FAIL")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("limit", [0, -1, 501, 1_000_000])
+def test_operator_transfer_list_rejects_an_unbounded_or_invalid_limit(limit: int) -> None:
+    r = client.get(f"/v1/operator/transfers?limit={limit}", headers=AUTH_HEADERS)
+    assert r.status_code == 422, r.text

@@ -287,9 +287,11 @@ def verify_mfa_login(
             cur.execute(
                 """
                 SELECT operator_id, username, email, totp_secret, totp_enabled, role,
-                       last_totp_step, mfa_failed_attempts, mfa_locked_until
+                       last_totp_step, mfa_failed_attempts, mfa_locked_until,
+                       COALESCE(mfa_locked_until > NOW(), FALSE) AS mfa_is_locked
                 FROM operators
                 WHERE operator_id = %s
+                FOR UPDATE
                 """,
                 (operator_id,),
             )
@@ -298,8 +300,10 @@ def verify_mfa_login(
                 raise AuthenticationError("Multi-factor authentication is not configured for this account.")
 
             # Check MFA lockout
-            now = datetime.now(UTC)
-            if op["mfa_locked_until"] and op["mfa_locked_until"] > now:
+            # Row is locked FOR UPDATE above: concurrent submissions of one code serialise here, so the
+            # second sees the first's last_totp_step and is rejected as a replay. Lockout is judged on
+            # the database clock (the same one that set mfa_locked_until).
+            if op["mfa_is_locked"]:
                 raise AuthenticationError("MFA verification temporarily restricted due to repeated failures.")
 
             valid, matched_step = verify_totp_step(
@@ -589,9 +593,12 @@ def confirm_totp_enrollment(operator_id: UUID, code: str) -> bool:
             cur.execute(
                 """
                 SELECT pending_totp_secret, pending_totp_expires_at, last_totp_step,
-                       mfa_failed_attempts, mfa_locked_until
+                       mfa_failed_attempts, mfa_locked_until,
+                       COALESCE(mfa_locked_until > NOW(), FALSE) AS mfa_is_locked,
+                       COALESCE(pending_totp_expires_at <= NOW(), TRUE) AS pending_expired
                 FROM operators
                 WHERE operator_id = %s
+                FOR UPDATE
                 """,
                 (operator_id,),
             )
@@ -599,11 +606,10 @@ def confirm_totp_enrollment(operator_id: UUID, code: str) -> bool:
             if not op or not op["pending_totp_secret"]:
                 raise AuthenticationError("No pending TOTP secret staged. Please initiate enrollment.")
 
-            now = datetime.now(UTC)
-            if op["mfa_locked_until"] and op["mfa_locked_until"] > now:
+            if op["mfa_is_locked"]:
                 raise AuthenticationError("MFA confirmation temporarily locked due to repeated failures.")
 
-            if not op["pending_totp_expires_at"] or op["pending_totp_expires_at"] <= now:
+            if op["pending_expired"]:
                 # Expired pending enrollment: clear staging
                 cur.execute(
                     """

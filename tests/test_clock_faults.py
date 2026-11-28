@@ -72,3 +72,32 @@ def test_control_a_lease_stamped_by_a_slow_clock_is_instantly_reclaimable(outbox
                   "+ interval '30 seconds' WHERE outbox_id = %s", (outbox_id,))
     again = claim_pending_outbox_events(settings.coordinator_db_url, aggregate_id=agg)
     assert [e["outbox_id"] for e in again] == [outbox_id]  # duplicate delivery, the failure mode
+
+
+APPROVAL_SRC = Path(__file__).resolve().parents[1] / "src/ledgerguard/approval/service.py"
+
+
+def test_approval_service_reads_no_process_clock() -> None:
+    """Approval expiry is NOW()-based; a skewed app clock must not stretch or shrink the window."""
+    tree = ast.parse(APPROVAL_SRC.read_text())
+    calls = {ast.unparse(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+    assert not {c for c in calls if c in {"datetime.now", "time.time", "datetime.utcnow"}}, calls
+
+
+def test_approval_window_follows_the_database_clock_not_a_skewed_process_clock(monkeypatch) -> None:
+    import time as _time
+
+    from ledgerguard.approval.service import (
+        SensitiveAction,  # noqa: F401  (import check)
+        create_approval_request,
+    )
+
+    monkeypatch.setattr(_time, "time", lambda: 0.0)  # process clock wildly wrong (1970)
+    action = next(iter(SensitiveAction))
+    req = create_approval_request(ADMIN, action_type=action, payload={"k": "v"},
+                                  initiator_id=str(uuid4()), initiator_role="ADMIN", ttl_seconds=600)
+    with psycopg.connect(ADMIN) as c:
+        remaining = float(c.execute(
+            "SELECT EXTRACT(EPOCH FROM (expires_at - clock_timestamp())) FROM approval_requests "
+            "WHERE request_id = %s", (req["request_id"],)).fetchone()[0])
+    assert 590 <= remaining <= 600, remaining

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
@@ -84,7 +83,6 @@ def create_approval_request(
     req_id = uuid4()
     payload_hash = compute_payload_hash(payload)
     state = ApprovalState.PENDING_APPROVAL if submit_immediately else ApprovalState.DRAFT
-    expires_at = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
 
     with get_db_connection(coord_db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
@@ -93,7 +91,7 @@ def create_approval_request(
                 INSERT INTO approval_requests (
                     request_id, action_type, state, payload, payload_hash,
                     initiator_id, initiator_role, expires_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW() + make_interval(secs => %s))
                 RETURNING *;
                 """,
                 (
@@ -104,7 +102,7 @@ def create_approval_request(
                     payload_hash,
                     initiator_id,
                     role.value,
-                    expires_at,
+                    ttl_seconds,
                 ),
             )
             row = cur.fetchone()
@@ -142,7 +140,10 @@ def approve_request(
 
     with get_db_connection(coord_db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute("SELECT * FROM approval_requests WHERE request_id = %s FOR UPDATE;", (request_id,))
+            cur.execute(
+                "SELECT *, (expires_at < NOW()) AS is_expired FROM approval_requests WHERE request_id = %s FOR UPDATE;",
+                (request_id,),
+            )
             req = cur.fetchone()
             if not req:
                 raise ValueError(f"Approval request {request_id} not found.")
@@ -154,7 +155,7 @@ def approve_request(
             if cur_state != ApprovalState.PENDING_APPROVAL:
                 raise ApprovalStateError(f"Request is in state {cur_state.value}, not PENDING_APPROVAL.")
 
-            if datetime.now(UTC) > req["expires_at"].astimezone(UTC):
+            if req["is_expired"]:
                 cur.execute(
                     "UPDATE approval_requests SET state = 'EXPIRED', updated_at = NOW() WHERE request_id = %s;",
                     (request_id,),
@@ -250,7 +251,10 @@ def execute_approved_request(
     role = require_state_changing_role(executor_role)
     with get_db_connection(coord_db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute("SELECT * FROM approval_requests WHERE request_id = %s FOR UPDATE;", (request_id,))
+            cur.execute(
+                "SELECT *, (expires_at < NOW()) AS is_expired FROM approval_requests WHERE request_id = %s FOR UPDATE;",
+                (request_id,),
+            )
             req = cur.fetchone()
             if not req:
                 raise ValueError(f"Approval request {request_id} not found.")
@@ -266,7 +270,7 @@ def execute_approved_request(
             if cur_state != ApprovalState.APPROVED:
                 raise ApprovalStateError(f"Request cannot execute from state {cur_state.value}.")
 
-            if datetime.now(UTC) > req["expires_at"].astimezone(UTC):
+            if req["is_expired"]:
                 cur.execute(
                     "UPDATE approval_requests SET state = 'EXPIRED', updated_at = NOW() WHERE request_id = %s;",
                     (request_id,),

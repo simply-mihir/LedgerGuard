@@ -715,7 +715,7 @@ def get_operator_accounts(
 
 @router.get("/operator/transfers")
 def get_operator_transfers(
-    limit: int = 50, _: None = Depends(verify_bearer_token)
+    limit: int = Query(default=50, ge=1, le=500), _: None = Depends(verify_bearer_token)
 ) -> list[dict[str, Any]]:
     """Return list of recent transfers with state and decision."""
     with get_db_connection(settings.coordinator_db_url) as conn:

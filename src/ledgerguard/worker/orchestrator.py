@@ -14,6 +14,7 @@ from ledgerguard.coordinator.failpoints import (
 from ledgerguard.coordinator.failpoints import (
     failpoints as default_failpoints,
 )
+from ledgerguard.db.advisory import singleton
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.observability import extract_trace_context, inject_trace_carrier, safe_span
 from ledgerguard.participant.workflow_handler import (
@@ -425,7 +426,28 @@ def recover_pending_transfers(
     ledger_db_urls: dict[str, str],
     transfer_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
-    """Scan and recover in-flight or interrupted transfers."""
+    """Scan and recover in-flight or interrupted transfers.
+
+    A global sweep (no ``transfer_id``) is a cluster-wide singleton: if another sweep holds the advisory
+    lock this one returns immediately instead of duplicating its work. Recovery of one named transfer
+    is not serialised here; it is idempotent through the durable decision.
+    """
+    if transfer_id is None:
+        with singleton(coord_db_url, RECOVERY_SWEEP_LOCK) as acquired:
+            if not acquired:
+                return []
+            return _recover_pending_transfers(coord_db_url, ledger_db_urls, None)
+    return _recover_pending_transfers(coord_db_url, ledger_db_urls, transfer_id)
+
+
+RECOVERY_SWEEP_LOCK = "ledgerguard:recovery-sweep"
+
+
+def _recover_pending_transfers(
+    coord_db_url: str,
+    ledger_db_urls: dict[str, str],
+    transfer_id: UUID | None,
+) -> list[dict[str, Any]]:
     results = []
     with get_db_connection(coord_db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
