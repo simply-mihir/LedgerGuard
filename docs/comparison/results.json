@@ -1,0 +1,340 @@
+{
+  "config": {
+    "amount_minor": 1000,
+    "bystander_timeout_ms": 1500,
+    "funding_minor": 5000000,
+    "ops": 48,
+    "protocols": [
+      "TCC",
+      "XA-2PC",
+      "Saga"
+    ],
+    "repeats": 12,
+    "warmup_ops": 8,
+    "workers": 4
+  },
+  "crash": [
+    {
+      "bystander_state": "SETTLED",
+      "bystander_wait_ms": 57.6,
+      "clearing_delta_after": 0,
+      "crash_point": "after durable COMMIT decision, before confirms",
+      "customer_funds_delta_after": 0,
+      "customer_funds_delta_in_window": 0,
+      "outcome_at_crash": "IN_DOUBT",
+      "partial_posting_visible": false,
+      "protocol": "TCC",
+      "recovery_ms": 34.6,
+      "resources_pinned_in_window": "1000 paise held as rows (no row locks held)",
+      "unresolved_after": 0
+    },
+    {
+      "bystander_state": "BLOCKED",
+      "bystander_wait_ms": 1507.8,
+      "clearing_delta_after": 0,
+      "crash_point": "both legs PREPARED, before COMMIT PREPARED",
+      "customer_funds_delta_after": 0,
+      "customer_funds_delta_in_window": 0,
+      "outcome_at_crash": "IN_DOUBT",
+      "partial_posting_visible": false,
+      "protocol": "XA-2PC",
+      "recovery_ms": 41.8,
+      "resources_pinned_in_window": "2 prepared txns holding row locks on both ledgers",
+      "unresolved_after": 0
+    },
+    {
+      "bystander_state": "SETTLED",
+      "bystander_wait_ms": 26.5,
+      "clearing_delta_after": 0,
+      "crash_point": "after step 1 (source debited), before step 2",
+      "customer_funds_delta_after": 0,
+      "customer_funds_delta_in_window": -1000,
+      "outcome_at_crash": "IN_DOUBT",
+      "partial_posting_visible": true,
+      "protocol": "Saga",
+      "recovery_ms": 4.9,
+      "resources_pinned_in_window": "none (source already debited and committed)",
+      "unresolved_after": 0
+    }
+  ],
+  "environment": {
+    "cpu_count": "12",
+    "machine": "x86_64",
+    "platform": "macOS-26.7.3-x86_64-i386-64bit",
+    "postgres": "17.11",
+    "python": "3.12.13"
+  },
+  "failure": [
+    {
+      "atomic": true,
+      "clearing_delta": 0,
+      "customer_funds_delta": 0,
+      "final_state": "CANCELLED",
+      "journals_written": 0,
+      "protocol": "TCC"
+    },
+    {
+      "atomic": true,
+      "clearing_delta": 0,
+      "customer_funds_delta": 0,
+      "final_state": "CANCELLED",
+      "journals_written": 0,
+      "protocol": "XA-2PC"
+    },
+    {
+      "atomic": true,
+      "clearing_delta": 0,
+      "customer_funds_delta": 0,
+      "final_state": "CANCELLED",
+      "journals_written": 2,
+      "protocol": "Saga"
+    }
+  ],
+  "generated_at": "2026-11-26T19:03:02+00:00",
+  "git_sha": "648a12afd893a97a5f0cbbe73f70570d68afcad8",
+  "git_tree": "8a7f3b857919b9f10c40cfa460e6464bdd7ae94d",
+  "schema_version": 1,
+  "throughput": [
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ci95": [
+        78.14526736970502,
+        82.15639929696162
+      ],
+      "p50_ms": 80.15,
+      "p95_ci95": [
+        85.33542197943063,
+        129.86624468723605
+      ],
+      "p95_ms": 107.6,
+      "protocol": "TCC",
+      "repeats": 12,
+      "seconds": 0.968,
+      "settled": 48,
+      "tps": 48.26,
+      "tps_ci95": [
+        46.50605255041415,
+        50.00394744958586
+      ],
+      "tps_runs": [
+        46.29,
+        48.56,
+        48.66,
+        50.02,
+        49.09,
+        40.09,
+        49.19,
+        49.7,
+        48.6,
+        49.84,
+        49.46,
+        49.56
+      ],
+      "tps_sd": 2.75,
+      "workers": 4,
+      "workload": "uncontended"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ci95": [
+        76.52902148136995,
+        82.32431185196337
+      ],
+      "p50_ms": 79.43,
+      "p95_ci95": [
+        89.62536701770031,
+        108.30629964896633
+      ],
+      "p95_ms": 98.97,
+      "protocol": "TCC",
+      "repeats": 12,
+      "seconds": 0.983,
+      "settled": 48,
+      "tps": 48.9,
+      "tps_ci95": [
+        47.09664586134087,
+        50.7000208053258
+      ],
+      "tps_runs": [
+        46.55,
+        41.23,
+        52.59,
+        48.26,
+        50.82,
+        49.85,
+        49.64,
+        48.94,
+        49.9,
+        50.83,
+        49.35,
+        48.82
+      ],
+      "tps_sd": 2.84,
+      "workers": 4,
+      "workload": "hot_source"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ci95": [
+        27.740571939088806,
+        30.384428060911194
+      ],
+      "p50_ms": 29.06,
+      "p95_ci95": [
+        71.33147644247147,
+        87.13852355752853
+      ],
+      "p95_ms": 79.23,
+      "protocol": "XA-2PC",
+      "repeats": 12,
+      "seconds": 0.443,
+      "settled": 48,
+      "tps": 105.25,
+      "tps_ci95": [
+        101.05234533993179,
+        109.43765466006822
+      ],
+      "tps_runs": [
+        91.19,
+        96.65,
+        98.04,
+        111.31,
+        109.81,
+        106.91,
+        106.91,
+        102.88,
+        111.0,
+        110.23,
+        109.57,
+        108.44
+      ],
+      "tps_sd": 6.6,
+      "workers": 4,
+      "workload": "uncontended"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ci95": [
+        27.372834539601246,
+        30.523832127065422
+      ],
+      "p50_ms": 28.95,
+      "p95_ci95": [
+        79.9862497797278,
+        99.53541688693888
+      ],
+      "p95_ms": 89.76,
+      "protocol": "XA-2PC",
+      "repeats": 12,
+      "seconds": 0.424,
+      "settled": 48,
+      "tps": 104.51,
+      "tps_ci95": [
+        99.27264561862796,
+        109.7390210480387
+      ],
+      "tps_runs": [
+        84.82,
+        106.97,
+        93.34,
+        108.48,
+        105.9,
+        110.69,
+        110.72,
+        99.41,
+        105.41,
+        105.09,
+        110.04,
+        113.2
+      ],
+      "tps_sd": 8.24,
+      "workers": 4,
+      "workload": "hot_source"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ci95": [
+        11.159743650394667,
+        11.758589682938666
+      ],
+      "p50_ms": 11.46,
+      "p95_ci95": [
+        10.929893267553943,
+        23.92344006577939
+      ],
+      "p95_ms": 17.43,
+      "protocol": "Saga",
+      "repeats": 12,
+      "seconds": 0.149,
+      "settled": 48,
+      "tps": 323.32,
+      "tps_ci95": [
+        306.84065501745624,
+        339.79434498254375
+      ],
+      "tps_runs": [
+        329.7,
+        243.98,
+        333.02,
+        334.21,
+        333.37,
+        322.42,
+        348.41,
+        330.6,
+        328.37,
+        325.81,
+        328.69,
+        321.23
+      ],
+      "tps_sd": 25.93,
+      "workers": 4,
+      "workload": "uncontended"
+    },
+    {
+      "not_settled": 0,
+      "ops": 48,
+      "p50_ci95": [
+        11.221606950985906,
+        12.406726382347427
+      ],
+      "p50_ms": 11.81,
+      "p95_ci95": [
+        13.351033207998295,
+        16.028966792001704
+      ],
+      "p95_ms": 14.69,
+      "protocol": "Saga",
+      "repeats": 12,
+      "seconds": 0.154,
+      "settled": 48,
+      "tps": 321.82,
+      "tps_ci95": [
+        306.78713977179706,
+        336.85119356153626
+      ],
+      "tps_runs": [
+        321.58,
+        327.05,
+        336.97,
+        344.24,
+        269.86,
+        340.68,
+        344.59,
+        334.93,
+        299.84,
+        293.29,
+        337.46,
+        311.34
+      ],
+      "tps_sd": 23.66,
+      "workers": 4,
+      "workload": "hot_source"
+    }
+  ],
+  "working_tree_clean": true
+}

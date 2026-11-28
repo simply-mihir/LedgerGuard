@@ -3,12 +3,18 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import psycopg
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ledgerguard.api.auth_routes import auth_router
+from ledgerguard.api.rate_limit import RateLimitMiddleware
 from ledgerguard.api.routes import router
+from ledgerguard.db.errors import is_infrastructure_error
 from ledgerguard.db.pool import close_all_pools
+from ledgerguard.db.retry import TransientRetryExhaustedError
+from ledgerguard.observability import extract_trace_context, inject_trace_carrier, safe_span
 
 
 @asynccontextmanager
@@ -36,6 +42,52 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.middleware("http")
+    async def trace_context_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+        parent_ctx = extract_trace_context(dict(request.headers))
+        with safe_span(
+            f"http.{request.method}",
+            attributes={"http.method": request.method, "http.route": request.url.path},
+            parent_context=parent_ctx,
+        ):
+            response = await call_next(request)
+            carrier = inject_trace_carrier()
+            if "traceparent" in carrier:
+                response.headers["traceparent"] = carrier["traceparent"]
+            return response
+
+    @app.exception_handler(psycopg.errors.LockNotAvailable)
+    @app.exception_handler(psycopg.errors.QueryCanceled)
+    @app.exception_handler(TransientRetryExhaustedError)
+    async def database_busy_handler(request: Request, exc: Exception) -> JSONResponse:
+        """A database time limit or exhausted transient retry is overload, not a server bug.
+
+        Nothing is leaked about the query; the client may retry, and every write path is
+        idempotent, so a retry cannot double-apply.
+        """
+        return JSONResponse(
+            {"detail": "The ledger database is busy. Retry shortly."},
+            status_code=503,
+            headers={"Retry-After": "1"},
+        )
+
+    @app.exception_handler(psycopg.OperationalError)
+    async def database_unavailable_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Disk full, out of memory, connection limits, shutdown or a lost connection.
+
+        The request was not judged invalid and nothing was committed by the failed transaction,
+        so the client may retry with the same idempotency key. No server detail is returned.
+        """
+        if not is_infrastructure_error(exc):
+            raise exc  # a business rejection that escaped its service layer stays a 500
+        return JSONResponse(
+            {"detail": "The ledger database is temporarily unavailable. Retry later."},
+            status_code=503,
+            headers={"Retry-After": "5"},
+        )
 
     @app.get("/health", tags=["System"])
     def health_check() -> dict[str, str]:

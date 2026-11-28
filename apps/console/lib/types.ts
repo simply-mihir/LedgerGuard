@@ -9,7 +9,7 @@ export interface OperatorPublicInfo {
   operator_id: string;
   username: string;
   email: string;
-  role: 'OPERATOR' | 'ADMIN' | 'AUDITOR';
+  role: 'VIEWER' | 'OPERATOR' | 'APPROVER' | 'AUDITOR' | 'ADMIN';
   totp_enabled: boolean;
 }
 
@@ -37,6 +37,8 @@ export interface OverviewData {
   oldest_pending_age_seconds: number;
   clearing_sum: number;
   last_reconciliation_status: string;
+  counts_complete?: boolean;
+  clearing_complete?: boolean;
   fault_injection_enabled: boolean;
 }
 

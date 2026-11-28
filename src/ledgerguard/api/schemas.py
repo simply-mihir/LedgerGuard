@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from ledgerguard.domain.models import AccountStatus, PostingSide
 
@@ -23,7 +23,7 @@ class CustomerResponse(BaseModel):
 
 class CreateAccountRequest(BaseModel):
     customer_id: UUID | None = None
-    currency: str = Field(default="INR", max_length=3)
+    currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
     name: str | None = None
 
 
@@ -60,14 +60,14 @@ class StatementResponse(BaseModel):
 
 class FundingRequest(BaseModel):
     account_id: UUID
-    amount_minor: int = Field(..., gt=0, le=100_000_000_000)
+    amount_minor: StrictInt = Field(..., gt=0, le=100_000_000_000)
     correlation_id: str | None = None
     description: str | None = None
 
 
 class CashOutRequest(BaseModel):
     account_id: UUID
-    amount_minor: int = Field(..., gt=0, le=100_000_000_000)
+    amount_minor: StrictInt = Field(..., gt=0, le=100_000_000_000)
     correlation_id: str | None = None
     description: str | None = None
 
@@ -75,8 +75,8 @@ class CashOutRequest(BaseModel):
 class TransferRequest(BaseModel):
     source_account_id: UUID
     destination_account_id: UUID
-    amount_minor: int = Field(..., gt=0, le=100_000_000_000)
-    currency: str = Field(default="INR", max_length=3)
+    amount_minor: StrictInt = Field(..., gt=0, le=100_000_000_000)
+    currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
     correlation_id: str | None = None
     description: str | None = None
 
@@ -143,6 +143,9 @@ class SystemOverviewResponse(BaseModel):
     clearing_sum: int
     last_reconciliation_status: str
     fault_injection_enabled: bool
+    # False when a source could not be read; the matching figures are then not measurements.
+    counts_complete: bool = True
+    clearing_complete: bool = True
 
 
 class DirectoryAccountResponse(BaseModel):
@@ -184,3 +187,61 @@ class ExperimentRunResponse(BaseModel):
     status: str
     steps: list[ExperimentStepResponse]
     final_accounting_state: dict[str, int | str]
+
+
+# ---------------------------------------------------------------------------
+# Operator request bodies (validated; unknown fields are ignored, never trusted)
+# ---------------------------------------------------------------------------
+
+
+class _OperatorBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
+class RefundBody(_OperatorBody):
+    amount_minor: int = Field(gt=0)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    reason: str = Field(default="operator_refund", max_length=500)
+    actor: str = Field(default="operator", min_length=1, max_length=255)
+
+
+class OpenDisputeBody(_OperatorBody):
+    transfer_id: UUID
+    amount_minor: int = Field(gt=0)
+    reason_code: str = Field(min_length=1, max_length=64)
+    actor: str = Field(default="operator", min_length=1, max_length=255)
+    evidence_metadata: dict[str, object] = Field(default_factory=dict)
+
+
+class DisputeTransitionBody(_OperatorBody):
+    to_state: str = Field(min_length=1, max_length=32)
+    actor: str = Field(default="operator", min_length=1, max_length=255)
+    reason_code: str | None = Field(default=None, max_length=64)
+    evidence_metadata: dict[str, object] | None = None
+
+
+class ApprovalCreateBody(_OperatorBody):
+    action_type: str = Field(min_length=1, max_length=64)
+    payload: dict[str, object] = Field(default_factory=dict)
+    initiator_id: str | None = Field(default=None, max_length=255)
+    initiator_role: str | None = Field(default=None, max_length=32)
+    ttl_seconds: int = Field(default=900, ge=1, le=86_400)
+
+
+class ApprovalApproveBody(_OperatorBody):
+    approver_id: str | None = Field(default=None, max_length=255)
+    approver_role: str | None = Field(default=None, max_length=32)
+    mfa_verified: bool = False
+    auth_age_seconds: int = Field(default=0, ge=0)
+
+
+class ApprovalRejectBody(_OperatorBody):
+    actor_id: str | None = Field(default=None, max_length=255)
+    actor_role: str | None = Field(default=None, max_length=32)
+    reason: str = Field(default="rejected_by_approver", max_length=500)
+
+
+class ApprovalExecuteBody(_OperatorBody):
+    executor_id: str | None = Field(default=None, max_length=255)
+    executor_role: str | None = Field(default=None, max_length=32)
+    payload: dict[str, object] | None = None

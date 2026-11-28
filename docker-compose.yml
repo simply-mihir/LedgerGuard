@@ -2,10 +2,14 @@ services:
   postgres-coordinator:
     image: postgres:17-alpine
     restart: unless-stopped
+    # pg_stat_statements: per-statement execution statistics (see docs/query_observability.md).
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     environment:
       POSTGRES_DB: coordinator_db
       POSTGRES_USER: ledgerguard_admin
       POSTGRES_PASSWORD: ledgerguard_admin_secret
+      # Page checksums detect silent disk corruption on read (fresh volumes only; see docs/data_integrity.md).
+      POSTGRES_INITDB_ARGS: "--data-checksums"
     ports:
       - "127.0.0.1:${COORDINATOR_DB_PORT:-${LEDGERGUARD_PORT_COORD:-5442}}:5432"
     volumes:
@@ -21,10 +25,14 @@ services:
   postgres-ledger1:
     image: postgres:17-alpine
     restart: unless-stopped
+    # pg_stat_statements: per-statement execution statistics (see docs/query_observability.md).
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     environment:
       POSTGRES_DB: ledger1_db
       POSTGRES_USER: ledgerguard_admin
       POSTGRES_PASSWORD: ledgerguard_admin_secret
+      # Page checksums detect silent disk corruption on read (fresh volumes only; see docs/data_integrity.md).
+      POSTGRES_INITDB_ARGS: "--data-checksums"
     ports:
       - "127.0.0.1:${LEDGER1_DB_PORT:-${LEDGERGUARD_PORT_L1:-5443}}:5432"
     volumes:
@@ -40,10 +48,14 @@ services:
   postgres-ledger2:
     image: postgres:17-alpine
     restart: unless-stopped
+    # pg_stat_statements: per-statement execution statistics (see docs/query_observability.md).
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     environment:
       POSTGRES_DB: ledger2_db
       POSTGRES_USER: ledgerguard_admin
       POSTGRES_PASSWORD: ledgerguard_admin_secret
+      # Page checksums detect silent disk corruption on read (fresh volumes only; see docs/data_integrity.md).
+      POSTGRES_INITDB_ARGS: "--data-checksums"
     ports:
       - "127.0.0.1:${LEDGER2_DB_PORT:-${LEDGERGUARD_PORT_L2:-5444}}:5432"
     volumes:
@@ -55,6 +67,14 @@ services:
       timeout: 3s
       retries: 10
       start_period: 2s
+
+  # Optional OpenTelemetry / Jaeger viewer (enabled via: docker compose --profile observability up -d)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4318:4318"
 
 volumes:
   coordinator_data:

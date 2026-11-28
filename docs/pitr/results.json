@@ -1,0 +1,9 @@
+{
+  "journals_before_disaster": 5,
+  "disaster_destroyed_primary_table": true,
+  "restored_journals": 5,
+  "restored_has_post_backup_postings": true,
+  "restored_excludes_post_disaster_write": true,
+  "restored_chain_ok": true,
+  "wal_segments_archived": 5
+}

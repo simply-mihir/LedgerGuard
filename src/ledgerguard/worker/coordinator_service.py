@@ -6,6 +6,7 @@ from uuid import UUID
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from ledgerguard.coordinator.idempotent_transfer import insert_or_adopt_transfer
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.worker.outbox import record_outbox_event
 
@@ -35,66 +36,37 @@ def create_coordinator_transfer(
     transfer_type: str = "CROSS_LEDGER",
 ) -> dict[str, Any]:
     """Persist a new transfer request in ACCEPTED state with an initial outbox task atomically."""
-    with get_db_connection(coord_db_url) as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            # Check for existing transfer with same idempotency key
-            cur.execute(
-                """
-                SELECT transfer_id, state, amount_minor, currency
-                FROM transfers
-                WHERE idempotency_key = %s;
-            """,
-                (idempotency_key,),
-            )
-            existing = cur.fetchone()
-            if existing:
-                return dict(existing)
+    def enqueue_prepare(conn: Any) -> None:
+        # Same transaction as the transfer insert: no transfer without its first outbox task.
+        record_outbox_event(
+            conn,
+            table_name="outbox_events",
+            aggregate_id=str(transfer_id),
+            event_type="DISPATCH_PREPARE",
+            payload={
+                "transfer_id": str(transfer_id),
+                "source_account_id": str(source_account_id),
+                "destination_account_id": str(destination_account_id),
+                "source_ledger_id": source_ledger_id,
+                "destination_ledger_id": destination_ledger_id,
+                "amount_minor": amount_minor,
+                "currency": currency,
+            },
+        )
 
-            # Insert transfer record
-            cur.execute(
-                """
-                INSERT INTO transfers (
-                    transfer_id, idempotency_key, source_account_id,
-                    destination_account_id, amount_minor, currency,
-                    transfer_type, state, source_ledger_id, destination_ledger_id
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'ACCEPTED', %s, %s)
-                RETURNING transfer_id, state, amount_minor, currency;
-            """,
-                (
-                    transfer_id,
-                    idempotency_key,
-                    source_account_id,
-                    destination_account_id,
-                    amount_minor,
-                    currency,
-                    transfer_type,
-                    source_ledger_id,
-                    destination_ledger_id,
-                ),
-            )
-            row = cur.fetchone()
-            if not row:
-                raise CoordinatorError("Failed to initiate transfer; row was not returned.")
-            transfer_dict = dict(row)
-
-            # Record outbox event for workflow worker to begin prepare phase
-            record_outbox_event(
-                conn,
-                table_name="outbox_events",
-                aggregate_id=str(transfer_id),
-                event_type="DISPATCH_PREPARE",
-                payload={
-                    "transfer_id": str(transfer_id),
-                    "source_account_id": str(source_account_id),
-                    "destination_account_id": str(destination_account_id),
-                    "source_ledger_id": source_ledger_id,
-                    "destination_ledger_id": destination_ledger_id,
-                    "amount_minor": amount_minor,
-                    "currency": currency,
-                },
-            )
-        conn.commit()
-
+    transfer_dict, _created = insert_or_adopt_transfer(
+        coord_db_url,
+        transfer_id=transfer_id,
+        idempotency_key=idempotency_key,
+        source_account_id=source_account_id,
+        destination_account_id=destination_account_id,
+        amount_minor=amount_minor,
+        currency=currency,
+        transfer_type=transfer_type,
+        source_ledger_id=source_ledger_id,
+        destination_ledger_id=destination_ledger_id,
+        on_created=enqueue_prepare,
+    )
     return transfer_dict
 
 

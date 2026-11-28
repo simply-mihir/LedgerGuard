@@ -1,0 +1,10 @@
+# Optional override for the XA two-phase-commit comparison baseline ONLY.
+# LedgerGuard itself never uses PREPARE TRANSACTION, so the default stack keeps
+# max_prepared_transactions at PostgreSQL's default of 0.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.xa.yml up -d
+services:
+  postgres-ledger1:
+    command: ["postgres", "-c", "max_prepared_transactions=64", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
+  postgres-ledger2:
+    command: ["postgres", "-c", "max_prepared_transactions=64", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]

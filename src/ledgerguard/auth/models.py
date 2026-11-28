@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+OperatorRole = Literal["VIEWER", "OPERATOR", "APPROVER", "AUDITOR", "ADMIN"]
+
 
 class OperatorPublicInfo(BaseModel):
     """Safe public representation of an authenticated operator."""
@@ -12,7 +14,7 @@ class OperatorPublicInfo(BaseModel):
     operator_id: UUID
     username: str
     email: str
-    role: Literal["OPERATOR", "ADMIN", "AUDITOR"]
+    role: OperatorRole
     totp_enabled: bool
 
 
@@ -68,5 +70,5 @@ class CreateOperatorRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
     email: str = Field(..., min_length=5, max_length=255)
     password: str = Field(..., min_length=8, max_length=255)
-    role: Literal["OPERATOR", "ADMIN", "AUDITOR"] = "OPERATOR"
+    role: OperatorRole = "OPERATOR"
     enable_totp: bool = False

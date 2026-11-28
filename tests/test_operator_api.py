@@ -106,11 +106,48 @@ def test_operator_signature_experiment_execution():
 def test_operator_experiment_forbidden_in_production(monkeypatch):
     """Rule: Local fault controls are disabled in public-safe / production configuration."""
     monkeypatch.setattr(settings, "env", "production")
+    # The shared demo token is disabled in production; authenticate with a named credential.
+    token = "p" * 40
+    monkeypatch.setattr(settings, "service_tokens_raw", f"ci-prod-check:ADMIN:{token}")
 
     response = client.post(
         "/v1/operator/experiments/run",
         json={"scenario": "SIGNATURE_RECOVERY"},
-        headers=AUTH_HEADERS,
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
     assert "disabled in production" in response.json()["detail"].lower()
+
+
+@pytest.mark.integration
+def test_operator_overview_never_reports_pass_when_a_ledger_cannot_be_read(monkeypatch):
+    """A clearing sum over fewer ledgers than exist proves nothing; it must read UNKNOWN, not PASS."""
+    from ledgerguard.api import routes
+
+    real = routes.get_db_connection
+    dead = routes.settings.ledger2_db_url
+
+    def flaky(url, *a, **kw):
+        if url == dead:
+            raise ConnectionError("ledger-2 down")
+        return real(url, *a, **kw)
+
+    monkeypatch.setattr(routes, "get_db_connection", flaky)
+    data = client.get("/v1/operator/overview", headers=AUTH_HEADERS).json()
+    assert data["reachability"]["ledger-2"] is False
+    assert data["clearing_complete"] is False
+    assert data["last_reconciliation_status"] == "UNKNOWN"
+
+
+@pytest.mark.integration
+def test_operator_overview_marks_itself_complete_when_everything_is_readable():
+    data = client.get("/v1/operator/overview", headers=AUTH_HEADERS).json()
+    assert data["counts_complete"] is True and data["clearing_complete"] is True
+    assert data["last_reconciliation_status"] in ("PASS", "FAIL")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("limit", [0, -1, 501, 1_000_000])
+def test_operator_transfer_list_rejects_an_unbounded_or_invalid_limit(limit: int) -> None:
+    r = client.get(f"/v1/operator/transfers?limit={limit}", headers=AUTH_HEADERS)
+    assert r.status_code == 422, r.text

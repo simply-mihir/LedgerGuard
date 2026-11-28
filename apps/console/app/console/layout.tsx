@@ -7,14 +7,45 @@ import { useAuth } from '../../lib/auth-context';
 import { OverviewData } from '../../lib/types';
 import { getOverview } from '../../lib/api';
 
-const NAV_ITEMS = [
-  { href: '/console', label: 'Platform Overview', icon: 'M3 3h7v9H3zm11 0h7v5h-7zm0 8h7v9h-7zM3 15h7v5H3z' },
-  { href: '/console/accounts', label: 'Accounts & Ledgers', icon: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
-  { href: '/console/transfers', label: 'TCC Transfers', icon: 'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3' },
-  { href: '/console/reconciliation', label: 'Reconciliation', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4' },
-  { href: '/console/experiments', label: 'Failure Lab', icon: 'M10 2v7.31M14 2v7.31M8.5 2h7M14 9.3a6.5 6.5 0 1 1-4 0' },
-  { href: '/console/security', label: 'Operator Security', icon: 'M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 0 1 6 0v3H9z' },
+const NAV_GROUPS: {
+  group: string;
+  items: { href: string; label: string; icon: string }[];
+}[] = [
+  {
+    group: 'Observe',
+    items: [
+      { href: '/console', label: 'Platform Overview', icon: 'M3 3h7v9H3zm11 0h7v5h-7zm0 8h7v9h-7zM3 15h7v5H3z' },
+      { href: '/console/accounts', label: 'Accounts & Ledgers', icon: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
+      { href: '/console/history', label: 'Historical Balances', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { href: '/console/transfers', label: 'TCC Transfers', icon: 'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3' },
+      { href: '/console/traces', label: 'Traces', icon: 'M3 12h4l3-9 4 18 3-9h4' },
+      { href: '/console/reconciliation', label: 'Reconciliation', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4' },
+    ],
+  },
+  {
+    group: 'Operate',
+    items: [
+      { href: '/console/recovery', label: 'Recovery', icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' },
+      { href: '/console/approvals', label: 'Approvals', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { href: '/console/disputes', label: 'Disputes', icon: 'M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z' },
+      { href: '/console/resilience', label: 'Resilience', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+      { href: '/console/security', label: 'Operator Security', icon: 'M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 0 1 6 0v3H9z' },
+    ],
+  },
+  {
+    group: 'Verify',
+    items: [
+      { href: '/console/chaos', label: 'Chaos Campaigns', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+      { href: '/console/formal', label: 'Formal Model', icon: 'M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z' },
+      { href: '/console/audit', label: 'Audit Integrity', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+      { href: '/console/performance', label: 'Performance', icon: 'M3 3v18h18M7 14l4-4 4 4 5-5' },
+      { href: '/console/disaster-recovery', label: 'Disaster Recovery', icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4' },
+      { href: '/console/experiments', label: 'Failure Lab', icon: 'M10 2v7.31M14 2v7.31M8.5 2h7M14 9.3a6.5 6.5 0 1 1-4 0' },
+    ],
+  },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, operator, logout } = useAuth();
@@ -167,54 +198,61 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           </div>
 
           {/* Navigation Items */}
-          <nav style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem', overflowY: 'auto' }}>
-            {NAV_ITEMS.map((item) => {
-              const isActive =
-                item.href === '/console'
-                  ? pathname === '/console'
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.65rem 0.95rem',
-                    fontSize: '0.8125rem',
-                    fontWeight: isActive ? 600 : 500,
-                    borderRadius: 'var(--radius-control, 14px)',
-                    textDecoration: 'none',
-                    color: isActive ? '#FFFFFF' : '#94A3B8',
-                    background: isActive
-                      ? 'linear-gradient(135deg, rgba(29, 78, 216, 0.40) 0%, rgba(37, 99, 235, 0.20) 100%)'
-                      : 'transparent',
-                    border: isActive
-                      ? '1px solid rgba(59, 130, 246, 0.45)'
-                      : '1px solid transparent',
-                    boxShadow: isActive ? '0 4px 14px rgba(29, 78, 216, 0.25)' : 'none',
-                    transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
-                  }}
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ color: isActive ? '#60A5FA' : '#64748B' }}
-                  >
-                    <path d={item.icon} />
-                  </svg>
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+          <nav style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
+            {NAV_GROUPS.map((grp) => (
+              <div key={grp.group} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                <div style={{ padding: '0 0.75rem', fontSize: '0.625rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.09em', color: '#64748B' }}>
+                  {grp.group}
+                </div>
+                {grp.items.map((item) => {
+                  const isActive =
+                    item.href === '/console'
+                      ? pathname === '/console'
+                      : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.6rem 0.95rem',
+                        fontSize: '0.8125rem',
+                        fontWeight: isActive ? 600 : 500,
+                        borderRadius: 'var(--radius-control, 14px)',
+                        textDecoration: 'none',
+                        color: isActive ? '#FFFFFF' : '#94A3B8',
+                        background: isActive
+                          ? 'linear-gradient(135deg, rgba(29, 78, 216, 0.40) 0%, rgba(37, 99, 235, 0.20) 100%)'
+                          : 'transparent',
+                        border: isActive
+                          ? '1px solid rgba(59, 130, 246, 0.45)'
+                          : '1px solid transparent',
+                        boxShadow: isActive ? '0 4px 14px rgba(29, 78, 216, 0.25)' : 'none',
+                        transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                      }}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ color: isActive ? '#60A5FA' : '#64748B' }}
+                      >
+                        <path d={item.icon} />
+                      </svg>
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
           {/* Cluster Connectivity Telemetry Widget */}

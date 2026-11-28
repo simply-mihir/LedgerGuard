@@ -1,71 +1,17 @@
 """Authentication and authorization utilities for the LedgerGuard API."""
 
-import secrets
+from fastapi import Depends, Header, HTTPException, status
 
-from fastapi import Header, HTTPException, Request, status
-
-from ledgerguard.auth.dependencies import (
-    COOKIE_SESSION_NAME,
-)
-from ledgerguard.auth.service import validate_session
-from ledgerguard.config import settings
+from ledgerguard.auth.dependencies import require_authenticated
+from ledgerguard.auth.models import OperatorPublicInfo
 
 
-def verify_bearer_token(
-    request: Request,
-    authorization: str | None = Header(default=None),
-    x_csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
-) -> None:
-    """Verify that a request provides a valid operator bearer token or active session cookie."""
-    # 1. Check session cookie first
-    session_cookie = request.cookies.get(COOKIE_SESSION_NAME)
-    if session_cookie:
-        operator, expected_csrf = validate_session(session_cookie)
-        if operator:
-            # Enforce Origin check and CSRF token on mutating actions when using cookie authentication
-            if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-                origin = request.headers.get("origin")
-                if origin:
-                    request_host = request.headers.get("host", "").split(":")[0]
-                    trusted_hosts = {"localhost", "127.0.0.1", "testserver"}
-                    if request_host:
-                        trusted_hosts.add(request_host)
-                    from urllib.parse import urlparse
-                    parsed = urlparse(origin)
-                    origin_host = parsed.hostname
-                    if origin_host not in trusted_hosts:
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Cross-origin state-changing request rejected.",
-                        )
-                if not x_csrf_token or not expected_csrf or not secrets.compare_digest(x_csrf_token, expected_csrf):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Invalid or missing CSRF token.",
-                    )
-            return
+def verify_bearer_token(_: OperatorPublicInfo = Depends(require_authenticated)) -> None:
+    """Route guard: authenticated operator (cookie+CSRF+origin, or service bearer token).
 
-    # 2. Check Authorization header
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Operator authentication required (missing Authorization header or session cookie).",
-            headers={"WWW-Authenticate": "Bearer, Cookie"},
-        )
-
-    parts = authorization.strip().split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Authorization format; expected 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if not secrets.compare_digest(parts[1], settings.api_bearer_token):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or expired bearer token",
-        )
+    Thin alias over the single auth path in ``ledgerguard.auth.dependencies``; read-only roles
+    are rejected on mutating methods.
+    """
 
 
 def require_idempotency_key(

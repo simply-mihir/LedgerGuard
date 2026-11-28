@@ -2,9 +2,9 @@ name: LedgerGuard CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/ledgerguard-v2]
   pull_request:
-    branches: [main]
+    branches: [main, feat/operator-console-redesign]
   workflow_dispatch:
 
 permissions:
@@ -22,15 +22,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.4.0
         with:
           enable-cache: true
 
@@ -38,7 +38,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Start PostgreSQL 17 containers
-        run: docker compose up -d
+        run: docker compose -f docker-compose.yml -f docker-compose.xa.yml up -d
 
       - name: Wait for PostgreSQL database health
         run: |
@@ -80,9 +80,15 @@ jobs:
       - name: Run signature recovery demonstration
         run: ./scripts/demo_signature_recovery.sh
 
-      - name: Audit Python production dependencies
+      - name: Run bounded deterministic chaos campaign
+        run: uv run python scripts/run_chaos_campaign.py --seed 42 --ops 12 --workers 2
+
+      - name: Verify tamper-evident journal hash chains
+        run: uv run python -m ledgerguard.cli verify-all-ledgers
+
+      - name: Audit Python dependencies (runtime and dev tooling)
         run: |
-          uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/ledgerguard-production-requirements.txt
+          uv export --frozen --all-extras --no-hashes --no-emit-project -o /tmp/ledgerguard-production-requirements.txt
           uvx pip-audit -r /tmp/ledgerguard-production-requirements.txt
 
       - name: Report container status on failure
@@ -104,10 +110,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -118,9 +124,10 @@ jobs:
           cd apps/console
           npm ci
           npm run lint
+          npm run typecheck
           npm test
           npm run build
-          npm audit --omit=dev
+          npm audit
 
   e2e:
     name: Real Browser E2E & Rendered Accessibility Tests
@@ -129,20 +136,20 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.4.0
         with:
           enable-cache: true
 
       - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -152,7 +159,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Start fresh PostgreSQL 17 containers
-        run: docker compose up -d
+        run: docker compose -f docker-compose.yml -f docker-compose.xa.yml up -d
 
       - name: Wait for PostgreSQL database health
         run: |
@@ -242,3 +249,21 @@ jobs:
       - name: Tear down containers and volumes
         if: always()
         run: docker compose down -v
+
+  tla:
+    name: TLA+ Bounded Model Checking
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Run TLC model checker
+        run: VERIFY_BROKEN=1 ./scripts/run_tla_model_check.sh

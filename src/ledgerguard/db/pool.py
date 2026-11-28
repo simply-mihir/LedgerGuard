@@ -8,6 +8,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from ledgerguard.config import settings
+
 logger = logging.getLogger(__name__)
 
 # Connection pools keyed by database URL
@@ -23,7 +25,12 @@ def get_connection_pool(db_url: str, min_size: int = 2, max_size: int = 15) -> C
             min_size=min_size,
             max_size=max_size,
             open=True,
-            kwargs={"row_factory": dict_row},
+            # Validate a connection when it is checked out, so connections killed by a database
+            # crash or restart are discarded transparently instead of failing the first caller.
+            check=ConnectionPool.check_connection,
+            # Server-side lock/statement/idle-in-transaction limits: a stuck lock or a stalled client
+            # becomes a bounded, classified failure instead of an unbounded wait.
+            kwargs={"row_factory": dict_row, "options": settings.db_session_options()},
         )
     return _pools[db_url]
 

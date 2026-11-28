@@ -10,6 +10,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ledgerguard.db.pool import get_db_connection
+from ledgerguard.observability import safe_span
 from ledgerguard.participant.reconciliation_service import run_local_reconciliation
 
 CLEARING_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000002")
@@ -55,6 +56,15 @@ def run_cross_ledger_reconciliation(
     - If drained is True, all pending transfers, in-flight clearing, and active holds must be zero.
     - Decisions, participant intents, and posted journal receipts are cross-verified.
     """
+    with safe_span("reconciliation.run", attributes={"operation.type": "RECONCILIATION", "drained": drained}):
+        return _run_cross_ledger_reconciliation_inner(coord_db_url, ledger_db_urls, drained)
+
+
+def _run_cross_ledger_reconciliation_inner(
+    coord_db_url: str,
+    ledger_db_urls: dict[str, str],
+    drained: bool = False,
+) -> CrossLedgerReconciliationReport:
     findings: list[CrossLedgerFinding] = []
     reachable_ledgers: list[str] = []
     unreachable_ledgers: list[str] = []

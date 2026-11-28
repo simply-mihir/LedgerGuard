@@ -1,0 +1,688 @@
+{
+  "environment": {
+    "platform": "macOS-26.7.3-x86_64-i386-64bit",
+    "postgres": "17.11",
+    "python": "3.12.13"
+  },
+  "generated_at": "2026-11-26T21:38:07+00:00",
+  "git_sha": "99b82d32b41beb90c1c19dc4aec50f0c2bf6ce37",
+  "git_tree": "22426e34c8f8d1b1bfcfeaad6c82f64ca0ef7eee",
+  "scenarios": [
+    {
+      "cancelled": 0,
+      "facts": {
+        "kills_inside_commit_window": "4/4"
+      },
+      "faults": [
+        "kill -9 worker",
+        "ledger-1 +120ms"
+      ],
+      "invariants": [
+        {
+          "detail": "4 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "4 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "4 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "SIGKILL after durable COMMIT",
+      "recovered_by_recovery_loop": 4,
+      "seconds": 51.63,
+      "settled": 4,
+      "transfers": 4
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "worker_kills": 4
+      },
+      "faults": [
+        "kill -9 x4 (seeded)"
+      ],
+      "invariants": [
+        {
+          "detail": "9 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "9 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "9 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Random SIGKILL burst",
+      "recovered_by_recovery_loop": 2,
+      "seconds": 43.79,
+      "settled": 9,
+      "transfers": 9
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "done_events": 8,
+        "worker_finished": true
+      },
+      "faults": [
+        "ledger-1 +150ms",
+        "ledger-2 +150ms"
+      ],
+      "invariants": [
+        {
+          "detail": "8 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "8 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "8 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Network latency",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 85.15,
+      "settled": 8,
+      "transfers": 8
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "bytes_dropped_by_partition": 6,
+        "progress_during_partition": 0
+      },
+      "faults": [
+        "ledger-2 black-hole",
+        "kill -9 hung worker"
+      ],
+      "invariants": [
+        {
+          "detail": "3 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "3 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "3 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Partition of destination ledger",
+      "recovered_by_recovery_loop": 1,
+      "seconds": 45.63,
+      "settled": 3,
+      "transfers": 3
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "connections_reset": 28,
+        "worker_errors": 2
+      },
+      "faults": [
+        "RST on live connections, random link"
+      ],
+      "invariants": [
+        {
+          "detail": "11 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "11 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "11 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "TCP reset storm",
+      "recovered_by_recovery_loop": 1,
+      "seconds": 81.91,
+      "settled": 11,
+      "transfers": 11
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "chunks_or_streams_damaged": 1,
+        "clean_transfers_before_damage": 2,
+        "seed": 42,
+        "worker_finished_under_fault": false
+      },
+      "faults": [
+        "bit flips in 15% of chunks"
+      ],
+      "invariants": [
+        {
+          "detail": "2 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "2 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "2 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Byte corruption",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 66.08,
+      "settled": 2,
+      "transfers": 2
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "chunks_or_streams_damaged": 1,
+        "clean_transfers_before_damage": 2,
+        "seed": 42,
+        "worker_finished_under_fault": false
+      },
+      "faults": [
+        "20% adjacent-chunk swaps",
+        "10% duplicated chunks"
+      ],
+      "invariants": [
+        {
+          "detail": "2 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "2 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "2 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Chunk reorder + duplicate",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 66.53,
+      "settled": 2,
+      "transfers": 2
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "chunks_or_streams_damaged": 13,
+        "clean_transfers_before_damage": 2,
+        "seed": 42,
+        "worker_finished_under_fault": true
+      },
+      "faults": [
+        "stream cut + RST after 1.5 KB"
+      ],
+      "invariants": [
+        {
+          "detail": "6 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "6 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "6 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "Mid-message truncation",
+      "recovered_by_recovery_loop": 4,
+      "seconds": 46.0,
+      "settled": 6,
+      "transfers": 6
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "acked_before_crash": 19,
+        "unacked_replayed": 11
+      },
+      "faults": [
+        "kill -9 API mid-burst",
+        "client retries"
+      ],
+      "invariants": [
+        {
+          "detail": "30/30 keys returned a transfer",
+          "name": "every_key_succeeds_on_replay",
+          "passed": true
+        },
+        {
+          "detail": "second replay identical to first",
+          "name": "replay_returns_same_transfer",
+          "passed": true
+        },
+        {
+          "detail": "source -3000, dest +3000, journals=30, expected 3000/30",
+          "name": "each_key_applied_exactly_once",
+          "passed": true
+        },
+        {
+          "detail": "19 acks before the crash all match after restart",
+          "name": "acknowledged_transfers_preserved",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "ledger_reconciliation",
+          "passed": true
+        }
+      ],
+      "name": "API SIGKILL + idempotent replay",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 5.07,
+      "settled": 30,
+      "transfers": 30
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "container_killed": "postgres-ledger2",
+        "worker_survived_outage": true
+      },
+      "faults": [
+        "docker kill -s KILL postgres-ledger2",
+        "restart"
+      ],
+      "invariants": [
+        {
+          "detail": "12 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "12 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "12 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "PostgreSQL SIGKILL (postgres-ledger2)",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 49.52,
+      "settled": 12,
+      "transfers": 12
+    },
+    {
+      "cancelled": 0,
+      "facts": {
+        "container_killed": "postgres-coordinator",
+        "worker_survived_outage": true
+      },
+      "faults": [
+        "docker kill -s KILL postgres-coordinator",
+        "restart"
+      ],
+      "invariants": [
+        {
+          "detail": "11 transfers, 0 not terminal",
+          "name": "all_transfers_terminal",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "customer_funds_conserved",
+          "passed": true
+        },
+        {
+          "detail": "delta=0",
+          "name": "clearing_nets_to_zero",
+          "passed": true
+        },
+        {
+          "detail": "active holds=0",
+          "name": "no_orphaned_holds",
+          "passed": true
+        },
+        {
+          "detail": "11 transfers checked",
+          "name": "single_settlement_per_transfer",
+          "passed": true
+        },
+        {
+          "detail": "11 decisions, 0 inconsistent",
+          "name": "decision_never_reverted",
+          "passed": true
+        },
+        {
+          "detail": "status=PASS",
+          "name": "cross_ledger_reconciliation",
+          "passed": true
+        },
+        {
+          "detail": "{'ledger-1': 'PASS', 'ledger-2': 'PASS'}",
+          "name": "journal_hash_chains_intact",
+          "passed": true
+        },
+        {
+          "detail": "0 non-conforming",
+          "name": "histories_conform_to_tla_spec",
+          "passed": true
+        }
+      ],
+      "name": "PostgreSQL SIGKILL (postgres-coordinator)",
+      "recovered_by_recovery_loop": 0,
+      "seconds": 49.1,
+      "settled": 11,
+      "transfers": 11
+    }
+  ],
+  "schema_version": 1,
+  "seed": 42,
+  "working_tree_clean": true
+}

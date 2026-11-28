@@ -4,12 +4,13 @@ import json
 from typing import Any
 from uuid import UUID, uuid4
 
-import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from ledgerguard.db.errors import is_infrastructure_error
 from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.constants import SYSTEM_CASH_ACCOUNT_ID
+from ledgerguard.domain.idempotency import IdempotencyConflictError
 from ledgerguard.domain.models import (
     AccountType,
     JournalLineInput,
@@ -19,6 +20,7 @@ from ledgerguard.domain.models import (
 )
 from ledgerguard.domain.money import AmountPaise
 from ledgerguard.domain.templates import validate_journal_template
+from ledgerguard.participant import request_idempotency
 
 
 class PostingError(Exception):
@@ -27,8 +29,16 @@ class PostingError(Exception):
     pass
 
 
-def post_journal_entry(db_url: str, request: JournalPostRequest) -> dict[str, Any]:
-    """Validate template rules and post a double-entry journal atomically to PostgreSQL."""
+def post_journal_entry(
+    db_url: str,
+    request: JournalPostRequest,
+    idempotency: tuple[str, str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Validate template rules and post a double-entry journal atomically to PostgreSQL.
+
+    ``idempotency`` is ``(scope, key, payload)``. The claim is taken in the same transaction as the
+    posting, so a retried or concurrent duplicate returns the first request's result and posts nothing.
+    """
     # 1. Fetch account types to perform business template validation
     account_ids = [line.account_id for line in request.lines]
     account_types: dict[UUID, AccountType] = {}
@@ -64,6 +74,12 @@ def post_journal_entry(db_url: str, request: JournalPostRequest) -> dict[str, An
     # 4. Call database stored procedure under transaction
     with get_db_connection(db_url) as conn:
         try:
+            if idempotency is not None:
+                scope, key, payload = idempotency
+                replay = request_idempotency.claim(conn, scope, key, payload)
+                if replay is not None:
+                    conn.rollback()  # nothing was written; release the connection cleanly
+                    return {**replay, "idempotent_replay": True}
             cur2: Any
             with conn.cursor(row_factory=dict_row) as cur2:
                 cur2.execute(
@@ -84,10 +100,18 @@ def post_journal_entry(db_url: str, request: JournalPostRequest) -> dict[str, An
                 )
                 row = cur2.fetchone()
                 result = row["result"] if row else {}
+            result = result if isinstance(result, dict) else json.loads(result)
+            if idempotency is not None:
+                request_idempotency.complete(conn, idempotency[0], idempotency[1], result)
             conn.commit()
-            return result if isinstance(result, dict) else json.loads(result)
-        except (psycopg.Error, Exception) as exc:
+            return result
+        except IdempotencyConflictError:
             conn.rollback()
+            raise
+        except Exception as exc:
+            conn.rollback()
+            if is_infrastructure_error(exc):
+                raise  # disk full, shutdown, lock timeout...: not a statement about the request
             raise PostingError(f"Posting failed: {exc}") from exc
 
 
@@ -97,6 +121,7 @@ def simulate_funding(
     amount: AmountPaise,
     correlation_id: str | None = None,
     description: str | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Deposit funds into a customer wallet from the platform cash asset account."""
     request = JournalPostRequest(
@@ -118,7 +143,12 @@ def simulate_funding(
             ),
         ],
     )
-    return post_journal_entry(db_url, request)
+    idem = (
+        (request_idempotency.FUNDING, idempotency_key,
+         {"account_id": str(account_id), "amount_minor": int(amount), "currency": "INR"})
+        if idempotency_key else None
+    )
+    return post_journal_entry(db_url, request, idem)
 
 
 def simulate_cash_out(
@@ -127,6 +157,7 @@ def simulate_cash_out(
     amount: AmountPaise,
     correlation_id: str | None = None,
     description: str | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Withdraw funds from a customer wallet into the platform cash asset account."""
     request = JournalPostRequest(
@@ -148,4 +179,9 @@ def simulate_cash_out(
             ),
         ],
     )
-    return post_journal_entry(db_url, request)
+    idem = (
+        (request_idempotency.CASH_OUT, idempotency_key,
+         {"account_id": str(account_id), "amount_minor": int(amount), "currency": "INR"})
+        if idempotency_key else None
+    )
+    return post_journal_entry(db_url, request, idem)

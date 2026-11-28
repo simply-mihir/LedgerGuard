@@ -1,25 +1,35 @@
 """FastAPI route handlers implementing the LedgerGuard REST API specification."""
 
+import json
+import logging
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from ledgerguard.api.auth import require_idempotency_key, verify_bearer_token
 from ledgerguard.api.schemas import (
     AccountResponse,
+    ApprovalApproveBody,
+    ApprovalCreateBody,
+    ApprovalExecuteBody,
+    ApprovalRejectBody,
     CashOutRequest,
     CreateAccountRequest,
     CreateCustomerRequest,
     CustomerResponse,
     DirectoryAccountResponse,
+    DisputeTransitionBody,
     ExperimentRunRequest,
     ExperimentRunResponse,
     ExperimentStepResponse,
     FundingRequest,
+    OpenDisputeBody,
     ReconciliationFindingResponse,
     ReconciliationRunResponse,
+    RefundBody,
     ReversalRequest,
     ReversalResponse,
     StatementEntryResponse,
@@ -30,6 +40,11 @@ from ledgerguard.api.schemas import (
     TransferResponse,
     WorkflowTimelineEntryResponse,
 )
+from ledgerguard.auth.dependencies import (
+    COOKIE_SESSION_NAME,
+    require_write_operator,
+)
+from ledgerguard.auth.models import OperatorPublicInfo
 from ledgerguard.config import settings
 from ledgerguard.coordinator.directory_service import provision_account, register_customer
 from ledgerguard.coordinator.failpoints import CrashAfterCommitError, FailpointManager
@@ -41,6 +56,7 @@ from ledgerguard.db.pool import get_db_connection
 from ledgerguard.domain.idempotency import IdempotencyConflictError
 from ledgerguard.domain.models import AccountStatus
 from ledgerguard.domain.money import AmountPaise
+from ledgerguard.domain.templates import TemplateValidationError
 from ledgerguard.participant.account_service import (
     AccountLifecycleError,
     AccountNotFoundError,
@@ -49,6 +65,7 @@ from ledgerguard.participant.account_service import (
     get_statement,
     set_account_status,
 )
+from ledgerguard.participant.customer_view import list_customer_accounts
 from ledgerguard.participant.posting_service import (
     PostingError,
     simulate_cash_out,
@@ -68,9 +85,19 @@ from ledgerguard.participant.transfer_service import (
 from ledgerguard.worker.orchestrator import recover_pending_transfers
 
 router = APIRouter(prefix="/v1")
+logger = logging.getLogger(__name__)
 
-# Global in-memory cache for recent reconciliation runs
-_reconciliation_runs: dict[str, ReconciliationRunResponse] = {}
+
+def _actor(request: Request, supplied: str) -> str:
+    """Audit identity: the authenticated session's username; client text only for service callers."""
+    if getattr(request.state, "auth_type", None) in ("cookie", "service"):
+        return str(request.state.operator.username)
+    return supplied
+
+# Chaos campaign results are an ephemeral, bounded demo cache. Reconciliation runs are durable
+# (coordinator table reconciliation_runs) so they survive restarts and are shared by workers.
+_MAX_CACHED_CAMPAIGNS = 50
+_chaos_campaigns: dict[str, dict[str, Any]] = {}
 
 
 def get_ledger_db_url() -> str:
@@ -83,13 +110,36 @@ def get_coord_db_url() -> str:
     return settings.coordinator_db_url
 
 
+def resolve_account_ledger_url(account_id: UUID) -> str:
+    """Return the participant ledger URL that owns an account.
+
+    The coordinator directory is authoritative for routing. Accounts created
+    directly on the default ledger (no directory row) fall back to that ledger.
+    """
+    with get_db_connection(settings.coordinator_db_url) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT ledger_id FROM account_directory WHERE account_id = %s;",
+                (account_id,),
+            )
+            row = cur.fetchone()
+    if row is not None and row["ledger_id"] == "ledger-2":
+        return settings.ledger2_db_url
+    if row is not None and row["ledger_id"] != "ledger-1":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Account {account_id} is routed to unknown ledger '{row['ledger_id']}'.",
+        )
+    return get_ledger_db_url()
+
+
 # ---------------------------------------------------------------------------
 # Customers
 # ---------------------------------------------------------------------------
 
 
 @router.post("/customers", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
-def create_customer(req: CreateCustomerRequest) -> CustomerResponse:
+def create_customer(req: CreateCustomerRequest, _: None = Depends(verify_bearer_token)) -> CustomerResponse:
     """Register a new customer record."""
     cust_id = uuid4()
     with get_db_connection(get_coord_db_url()) as conn:
@@ -115,6 +165,19 @@ def create_customer(req: CreateCustomerRequest) -> CustomerResponse:
     )
 
 
+@router.get("/customers/{customer_id}/accounts")
+def get_customer_accounts(
+    customer_id: UUID,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """A customer's accounts across every ledger, read under database row-level security."""
+    accounts: list[dict[str, Any]] = []
+    for ledger_id, url in (("ledger-1", settings.ledger1_db_url), ("ledger-2", settings.ledger2_db_url)):
+        for row in list_customer_accounts(url, customer_id):
+            accounts.append({"ledger_id": ledger_id, **row})
+    return {"customer_id": str(customer_id), "accounts": accounts}
+
+
 # ---------------------------------------------------------------------------
 # Accounts & Balances
 # ---------------------------------------------------------------------------
@@ -124,14 +187,19 @@ def create_customer(req: CreateCustomerRequest) -> CustomerResponse:
 def create_account(
     req: CreateAccountRequest,
     idempotency_key: str = Depends(require_idempotency_key),
+    _: None = Depends(verify_bearer_token),
 ) -> AccountResponse:
     """Idempotently create an active customer wallet account."""
-    acct = create_ledger_account(
-        get_ledger_db_url(),
-        customer_id=req.customer_id,
-        currency=req.currency,
-        name=req.name,
-    )
+    try:
+        acct = create_ledger_account(
+            get_ledger_db_url(),
+            customer_id=req.customer_id,
+            currency=req.currency,
+            name=req.name,
+            idempotency_key=idempotency_key,
+        )
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return AccountResponse(
         account_id=acct.account_id,
         currency=acct.currency,
@@ -145,10 +213,10 @@ def create_account(
 
 
 @router.get("/accounts/{account_id}/balance", response_model=AccountResponse)
-def get_balance(account_id: UUID) -> AccountResponse:
+def get_balance(account_id: UUID, _: None = Depends(verify_bearer_token)) -> AccountResponse:
     """Return authoritative posted, held, and available balances for an account."""
     try:
-        acct = get_account_balance(get_ledger_db_url(), account_id)
+        acct = get_account_balance(resolve_account_ledger_url(account_id), account_id)
         return AccountResponse(
             account_id=acct.account_id,
             currency=acct.currency,
@@ -168,11 +236,12 @@ def get_account_statement(
     account_id: UUID,
     cursor: int | None = Query(default=None, alias="cursor"),
     limit: int = Query(default=50, ge=1, le=100),
+    _: None = Depends(verify_bearer_token),
 ) -> StatementResponse:
     """Retrieve chronological statement entries using account-sequence cursor pagination."""
     try:
         entries, next_cursor = get_statement(
-            get_ledger_db_url(), account_id, cursor_sequence=cursor, limit=limit
+            resolve_account_ledger_url(account_id), account_id, cursor_sequence=cursor, limit=limit
         )
         return StatementResponse(
             account_id=account_id,
@@ -292,6 +361,7 @@ def close_account(
 @router.post("/funding", status_code=status.HTTP_201_CREATED)
 def fund_account(
     req: FundingRequest,
+    response: Response,
     idempotency_key: str = Depends(require_idempotency_key),
     _: None = Depends(verify_bearer_token),
 ) -> dict[str, Any]:
@@ -304,17 +374,21 @@ def fund_account(
             amt,
             correlation_id=req.correlation_id or idempotency_key,
             description=req.description,
+            idempotency_key=idempotency_key,
         )
+        if result.pop("idempotent_replay", False):
+            response.headers["Idempotent-Replayed"] = "true"
         return {"status": "POSTED", "result": result}
-    except PostingError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (PostingError, TemplateValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/cash-outs", status_code=status.HTTP_201_CREATED)
 def cash_out(
     req: CashOutRequest,
+    response: Response,
     idempotency_key: str = Depends(require_idempotency_key),
     _: None = Depends(verify_bearer_token),
 ) -> dict[str, Any]:
@@ -327,12 +401,15 @@ def cash_out(
             amt,
             correlation_id=req.correlation_id or idempotency_key,
             description=req.description,
+            idempotency_key=idempotency_key,
         )
+        if result.pop("idempotent_replay", False):
+            response.headers["Idempotent-Replayed"] = "true"
         return {"status": "POSTED", "result": result}
-    except PostingError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (PostingError, TemplateValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +421,7 @@ def cash_out(
 def create_transfer(
     req: TransferRequest,
     idempotency_key: str = Depends(require_idempotency_key),
+    _: None = Depends(verify_bearer_token),
 ) -> TransferResponse:
     """Submit a wallet transfer with request idempotency and row-level concurrency protection."""
     try:
@@ -370,7 +448,7 @@ def create_transfer(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except InsufficientFundsError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=422, detail=str(exc)
         ) from exc
     except AccountNotActiveError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -379,7 +457,7 @@ def create_transfer(
 
 
 @router.get("/transfers/{transfer_id}", response_model=TransferResponse)
-def get_transfer(transfer_id: UUID) -> TransferResponse:
+def get_transfer(transfer_id: UUID, _: None = Depends(verify_bearer_token)) -> TransferResponse:
     """Retrieve state, journal receipts, and reversal status of a transfer."""
     try:
         details = get_transfer_details(get_ledger_db_url(), transfer_id)
@@ -427,7 +505,7 @@ def reverse_transfer(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ReversalRejectedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=422, detail=str(exc)
         ) from exc
     except TransferError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -439,7 +517,7 @@ def reverse_transfer(
 
 
 @router.post("/admin/reconciliation-runs", response_model=ReconciliationRunResponse)
-def trigger_reconciliation(_: None = Depends(verify_bearer_token)) -> ReconciliationRunResponse:
+def trigger_reconciliation(request: Request, _: None = Depends(verify_bearer_token)) -> ReconciliationRunResponse:
     """Execute a comprehensive double-entry reconciliation audit."""
     run_id = str(uuid4())
     report = run_local_reconciliation(get_ledger_db_url())
@@ -463,18 +541,35 @@ def trigger_reconciliation(_: None = Depends(verify_bearer_token)) -> Reconcilia
             for f in report.findings
         ],
     )
-    _reconciliation_runs[run_id] = response
+    with get_db_connection(settings.coordinator_db_url) as conn:
+        conn.execute(
+            "INSERT INTO reconciliation_runs (run_id, run_at, status, report, requested_by) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (run_id, response.run_at, response.status,
+             Jsonb(json.loads(response.model_dump_json())), _actor(request, "system")),
+        )
+        conn.commit()
     return response
 
 
 @router.get("/admin/reconciliation-runs/{run_id}", response_model=ReconciliationRunResponse)
-def get_reconciliation_run(run_id: str) -> ReconciliationRunResponse:
+def get_reconciliation_run(run_id: str, _: None = Depends(verify_bearer_token)) -> ReconciliationRunResponse:
     """Retrieve details and findings of a previous reconciliation run."""
-    if run_id not in _reconciliation_runs:
+    try:
+        run_uuid = UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Reconciliation run {run_id} not found."
+        ) from exc
+    with get_db_connection(settings.coordinator_db_url) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute("SELECT report FROM reconciliation_runs WHERE run_id = %s", (run_uuid,))
+            row = cur.fetchone()
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Reconciliation run {run_id} not found."
         )
-    return _reconciliation_runs[run_id]
+    return ReconciliationRunResponse.model_validate(row["report"])
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +600,8 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
     settled_transfers = 0
     pending_transfers = 0
     oldest_age = 0
+    counts_complete = True
+    clearing_complete = True
 
     try:
         with get_db_connection(settings.coordinator_db_url) as conn:
@@ -540,7 +637,9 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
                 pending_transfers = int(p_row["c"]) if p_row else 0
                 oldest_age = int(p_row["max_age"]) if p_row else 0
     except Exception:
-        pass
+        # Report the gap instead of presenting zeros as if they were measured.
+        logger.warning("operator overview: coordinator counts unavailable", exc_info=True)
+        counts_complete = False
 
     clearing_sum = 0
     for url in [settings.ledger1_db_url, settings.ledger2_db_url]:
@@ -556,7 +655,9 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
                     if clr_row:
                         clearing_sum += int(clr_row["posted_balance_minor"])
         except Exception:
-            pass
+            logger.warning("operator overview: clearing balance unavailable for %s", url.rsplit("@", 1)[-1],
+                           exc_info=True)
+            clearing_complete = False
 
     return SystemOverviewResponse(
         reachability=reachability,
@@ -567,14 +668,22 @@ def get_operator_overview(_: None = Depends(verify_bearer_token)) -> SystemOverv
         pending_transfers=pending_transfers,
         oldest_pending_age_seconds=oldest_age,
         clearing_sum=clearing_sum,
-        last_reconciliation_status="PASS" if clearing_sum == 0 else "FAIL",
+        counts_complete=counts_complete,
+        clearing_complete=clearing_complete,
+        # A sum over fewer ledgers than exist proves nothing, so it is never reported as PASS.
+        last_reconciliation_status=(
+            "UNKNOWN" if not clearing_complete else "PASS" if clearing_sum == 0 else "FAIL"),
         fault_injection_enabled=settings.env != "production",
     )
 
 
 @router.get("/operator/accounts", response_model=list[DirectoryAccountResponse])
-def get_operator_accounts(_: None = Depends(verify_bearer_token)) -> list[DirectoryAccountResponse]:
-    """Return all provisioned customer accounts across participants."""
+def get_operator_accounts(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _: None = Depends(verify_bearer_token),
+) -> list[DirectoryAccountResponse]:
+    """Return provisioned customer accounts across participants (newest first, paginated)."""
     results: list[DirectoryAccountResponse] = []
     with get_db_connection(settings.coordinator_db_url) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
@@ -583,9 +692,10 @@ def get_operator_accounts(_: None = Depends(verify_bearer_token)) -> list[Direct
                 SELECT account_id, customer_id, ledger_id, routing_version,
                        provisioning_state, currency
                 FROM account_directory
-                ORDER BY created_at DESC
-                LIMIT 100;
-            """
+                ORDER BY created_at DESC, account_id
+                LIMIT %s OFFSET %s;
+                """,
+                (limit, offset),
             )
             directory_rows = cur.fetchall()
 
@@ -594,31 +704,38 @@ def get_operator_accounts(_: None = Depends(verify_bearer_token)) -> list[Direct
         acct_id = UUID(str(d["account_id"]))
         cust_id = UUID(str(d["customer_id"]))
         url = settings.ledger1_db_url if lid == "ledger-1" else settings.ledger2_db_url
+        posted = held = available = 0
+        acct_status = "UNAVAILABLE"
         try:
             bal = get_account_balance(url, acct_id)
-            results.append(
-                DirectoryAccountResponse(
-                    account_id=acct_id,
-                    customer_id=cust_id,
-                    ledger_id=lid,
-                    routing_version=d["routing_version"],
-                    provisioning_state=d["provisioning_state"],
-                    currency=d["currency"],
-                    posted_balance_minor=bal.posted_balance_minor,
-                    held_amount_minor=bal.held_amount_minor,
-                    available_balance_minor=bal.available_balance_minor,
-                    status=bal.status.value,
-                )
+            posted, held, available = (
+                bal.posted_balance_minor, bal.held_amount_minor, bal.available_balance_minor
             )
+            acct_status = bal.status.value
         except Exception:
-            pass
+            # Surface the account as UNAVAILABLE (visible) instead of silently dropping it.
+            logger.exception("balance lookup failed for account %s on %s", acct_id, lid)
+        results.append(
+            DirectoryAccountResponse(
+                account_id=acct_id,
+                customer_id=cust_id,
+                ledger_id=lid,
+                routing_version=d["routing_version"],
+                provisioning_state=d["provisioning_state"],
+                currency=d["currency"],
+                posted_balance_minor=posted,
+                held_amount_minor=held,
+                available_balance_minor=available,
+                status=acct_status,
+            )
+        )
 
     return results
 
 
 @router.get("/operator/transfers")
 def get_operator_transfers(
-    limit: int = 50, _: None = Depends(verify_bearer_token)
+    limit: int = Query(default=50, ge=1, le=500), _: None = Depends(verify_bearer_token)
 ) -> list[dict[str, Any]]:
     """Return list of recent transfers with state and decision."""
     with get_db_connection(settings.coordinator_db_url) as conn:
@@ -668,7 +785,11 @@ def get_transfer_timeline(
             event_id=r["event_id"],
             transfer_id=r["transfer_id"],
             event_type=r["event_type"],
-            details=r.get("details") or {},
+            details={
+                k: v
+                for k, v in (r.get("details") or {}).items()
+                if not isinstance(v, dict)
+            },
             created_at=r["created_at"],
         )
         for r in rows
@@ -810,3 +931,427 @@ def run_operator_experiment(
             detail=f"Unknown scenario '{req.scenario}'.",
         )
 
+
+@router.post("/operator/chaos/run")
+def run_operator_chaos_campaign(
+    config: dict[str, Any] | None = None,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Execute a bounded deterministic chaos campaign in non-production environments."""
+    if settings.env == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chaos campaigns are disabled in production environment.",
+        )
+
+    from ledgerguard.chaos import ChaosCampaignConfig, ChaosCampaignEngine
+
+    cfg = ChaosCampaignConfig.model_validate(config or {})
+    report = ChaosCampaignEngine(
+        coord_db_url=settings.coordinator_db_url,
+        ledger1_db_url=settings.ledger1_db_url,
+        ledger2_db_url=settings.ledger2_db_url,
+    ).run(cfg)
+    payload = report.model_dump()
+    _chaos_campaigns[report.campaign_id] = payload
+    while len(_chaos_campaigns) > _MAX_CACHED_CAMPAIGNS:
+        _chaos_campaigns.pop(next(iter(_chaos_campaigns)))
+    return payload
+
+
+@router.get("/operator/chaos/campaigns")
+def list_operator_chaos_campaigns(
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return recent chaos campaign reports."""
+    return list(reversed(list(_chaos_campaigns.values())))
+
+
+@router.get("/operator/audit/verify")
+def verify_operator_audit_chains(
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Verify tamper-evident SHA-256 journal hash chains across all participant ledgers."""
+    from ledgerguard.audit import verify_all_ledgers
+
+    return verify_all_ledgers()
+
+
+@router.post("/operator/audit/checkpoint")
+def create_operator_audit_checkpoint(
+    ledger_id: str = Query(default="ledger-1", pattern="^(ledger-1|ledger-2)$"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Create a Merkle checkpoint for a participant ledger and attest it in Coordinator DB."""
+    from ledgerguard.audit import create_journal_checkpoint
+
+    url = settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
+    res = create_journal_checkpoint(url, settings.coordinator_db_url, ledger_id)
+    return res.model_dump()
+
+
+@router.get("/operator/traces")
+def get_operator_traces(
+    limit: int = Query(default=30, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return recent distributed trace summaries."""
+    from ledgerguard.observability import list_recent_traces
+
+    return list_recent_traces(limit=limit)
+
+
+@router.get("/operator/transfers/{transfer_id}/trace")
+def get_operator_transfer_trace(
+    transfer_id: UUID,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Return span waterfall and latency metrics for a specific transfer."""
+    from ledgerguard.observability import get_trace_waterfall_for_transfer
+
+    return get_trace_waterfall_for_transfer(str(transfer_id))
+
+
+@router.get("/operator/transfers/{transfer_id}/explain")
+def explain_operator_transfer(
+    transfer_id: UUID,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Return deterministic rule-based recovery explanation for a transfer."""
+    from ledgerguard.recovery_explain import explain_transfer_from_db
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    return explain_transfer_from_db(settings.coordinator_db_url, ledger_urls, transfer_id).model_dump()
+
+
+@router.get("/operator/recovery/queue")
+def get_operator_recovery_queue(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return unresolved transfers with deterministic recovery explanations."""
+    from ledgerguard.recovery_explain import list_recovery_queue_with_explanations
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    return list_recovery_queue_with_explanations(settings.coordinator_db_url, ledger_urls, limit=limit)
+
+
+@router.get("/operator/history/accounts/{account_id}/balance")
+def get_operator_account_balance_as_of(
+    account_id: UUID,
+    as_of: str = Query(..., description="ISO-8601 UTC timestamp"),
+    ledger_id: str = Query(default="ledger-1", pattern="^(ledger-1|ledger-2)$"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Reconstruct account posted, held, and available balance as of timestamp T."""
+    from datetime import datetime
+
+    from ledgerguard.history import reconstruct_account_balance_as_of
+
+    url = settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
+    try:
+        dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        proof = reconstruct_account_balance_as_of(url, account_id, dt, ledger_id=ledger_id)
+        return proof.model_dump()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/history/accounts/{account_id}/snapshot")
+def create_operator_account_snapshot(
+    account_id: UUID,
+    ledger_id: str = Query(default="ledger-1", pattern="^(ledger-1|ledger-2)$"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Create an immutable checksummed balance snapshot for an account."""
+    from ledgerguard.history import create_account_snapshot
+
+    url = settings.ledger1_db_url if ledger_id == "ledger-1" else settings.ledger2_db_url
+    return create_account_snapshot(url, account_id, ledger_id).model_dump()
+
+
+@router.get("/operator/history/clearing")
+def get_operator_clearing_as_of(
+    as_of: str = Query(..., description="ISO-8601 UTC timestamp"),
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Reconstruct cross-ledger clearing balance as of timestamp T."""
+    from datetime import datetime
+
+    from ledgerguard.history import reconstruct_clearing_as_of
+
+    dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+    return reconstruct_clearing_as_of(settings.ledger1_db_url, settings.ledger2_db_url, dt).model_dump()
+
+
+@router.post("/operator/transfers/{transfer_id}/refund")
+def issue_operator_refund(
+    transfer_id: UUID,
+    body: RefundBody,
+    request: Request,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Issue a full or partial idempotent refund for a settled transfer."""
+    from ledgerguard.disputes import RefundLimitExceededError, issue_refund
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    try:
+        return issue_refund(
+            settings.coordinator_db_url,
+            ledger_urls,
+            original_transfer_id=transfer_id,
+            amount=AmountPaise(body.amount_minor),
+            idempotency_key=body.idempotency_key,
+            reason=body.reason,
+            actor=_actor(request, body.actor),
+        )
+    except RefundLimitExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        code = status.HTTP_404_NOT_FOUND if "not found" in str(exc) else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=str(exc)) from exc
+
+
+@router.get("/operator/disputes")
+def list_operator_disputes(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """List chargeback disputes."""
+    from ledgerguard.disputes import list_disputes
+
+    return list_disputes(settings.coordinator_db_url, limit=limit)
+
+
+@router.post("/operator/disputes")
+def open_operator_dispute(
+    body: OpenDisputeBody,
+    request: Request,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Open a chargeback dispute on a settled transfer."""
+    from ledgerguard.disputes import DisputeTransitionError, RefundLimitExceededError, open_dispute
+
+    try:
+        return open_dispute(
+            settings.coordinator_db_url,
+            transfer_id=body.transfer_id,
+            amount=AmountPaise(body.amount_minor),
+            reason_code=body.reason_code,
+            actor=_actor(request, body.actor),
+            evidence_metadata=dict(body.evidence_metadata),
+        )
+    except (DisputeTransitionError, RefundLimitExceededError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/disputes/{dispute_id}/transition")
+def transition_operator_dispute(
+    dispute_id: UUID,
+    body: DisputeTransitionBody,
+    request: Request,
+    _: None = Depends(verify_bearer_token),
+) -> dict[str, Any]:
+    """Advance a dispute state machine (APPROVED triggers compensating refund)."""
+    from ledgerguard.disputes import DisputeState, DisputeTransitionError, transition_dispute
+
+    ledger_urls = {"ledger-1": settings.ledger1_db_url, "ledger-2": settings.ledger2_db_url}
+    try:
+        return transition_dispute(
+            settings.coordinator_db_url,
+            ledger_urls,
+            dispute_id=dispute_id,
+            to_state=DisputeState(body.to_state),
+            actor=_actor(request, body.actor),
+            reason_code=body.reason_code,
+            evidence_metadata=dict(body.evidence_metadata) if body.evidence_metadata else None,
+        )
+    except (DisputeTransitionError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+def _session_bound(
+    request: Request, operator: OperatorPublicInfo, body: Any, id_key: str, role_key: str
+) -> dict[str, Any]:
+    """Bind approval actor identity to the authenticated operator session.
+
+    Browser sessions cannot assert another operator's id, role or MFA state:
+    those values are taken from the server-side session and any client-supplied
+    values are discarded. Named service credentials are bound the same way (identity
+    ``svc:<name>``, no MFA). Only the legacy shared demo token, disabled in production, may supply
+    explicit actors.
+    """
+    data: dict[str, Any] = dict(body.model_dump(exclude_unset=True))
+    auth_type = getattr(request.state, "auth_type", None)
+    if auth_type not in ("cookie", "service"):
+        if not data.get(id_key):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{id_key}' is required."
+            )
+        return data
+    bound = dict(data)
+    bound[id_key] = operator.username
+    bound[role_key] = operator.role
+    bound["mfa_verified"] = operator.totp_enabled
+    # Step-up freshness is measured from the server-side session, never trusted from the client.
+    # Service credentials have no interactive login, so they can never satisfy the recent-auth
+    # (or MFA) requirement for approvals.
+    if auth_type == "cookie":
+        from ledgerguard.auth.service import session_auth_age_seconds
+
+        bound["auth_age_seconds"] = session_auth_age_seconds(
+            request.cookies.get(COOKIE_SESSION_NAME, "")
+        )
+    else:
+        bound["auth_age_seconds"] = 10**9
+    return bound
+
+
+@router.get("/operator/approvals")
+def list_operator_approvals(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """List four-eyes approval requests."""
+    from ledgerguard.approval import list_approval_requests
+
+    return list_approval_requests(settings.coordinator_db_url, limit=limit)
+
+
+@router.post("/operator/approvals")
+def create_operator_approval(
+    body: ApprovalCreateBody,
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_write_operator),
+) -> dict[str, Any]:
+    """Submit a new sensitive action for four-eyes approval."""
+    data = _session_bound(request, operator, body, "initiator_id", "initiator_role")
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        SensitiveAction,
+        create_approval_request,
+    )
+
+    try:
+        return create_approval_request(
+            settings.coordinator_db_url,
+            action_type=SensitiveAction(str(data["action_type"])),
+            payload=dict(data.get("payload") or {}),
+            initiator_id=str(data["initiator_id"]),
+            initiator_role=str(data.get("initiator_role", "OPERATOR")),
+            ttl_seconds=int(data.get("ttl_seconds", 900)),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/approvals/{request_id}/approve")
+def approve_operator_request(
+    request_id: UUID,
+    body: ApprovalApproveBody,
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_write_operator),
+) -> dict[str, Any]:
+    """Approve a pending dual-control request."""
+    data = _session_bound(request, operator, body, "approver_id", "approver_role")
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        ApprovalStateError,
+        approve_request,
+    )
+
+    try:
+        return approve_request(
+            settings.coordinator_db_url,
+            request_id=request_id,
+            approver_id=str(data["approver_id"]),
+            approver_role=str(data.get("approver_role", "APPROVER")),
+            mfa_verified=bool(data.get("mfa_verified", False)),
+            auth_age_seconds=int(data.get("auth_age_seconds", 0)),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ApprovalStateError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/approvals/{request_id}/reject")
+def reject_operator_request(
+    request_id: UUID,
+    body: ApprovalRejectBody,
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_write_operator),
+) -> dict[str, Any]:
+    """Reject a pending dual-control request."""
+    data = _session_bound(request, operator, body, "actor_id", "actor_role")
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        ApprovalStateError,
+        reject_request,
+    )
+
+    try:
+        return reject_request(
+            settings.coordinator_db_url,
+            request_id=request_id,
+            actor_id=str(data["actor_id"]),
+            actor_role=str(data.get("actor_role", "APPROVER")),
+            reason=str(data.get("reason", "rejected_by_approver")),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ApprovalStateError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/operator/approvals/{request_id}/execute")
+def execute_operator_approval(
+    request_id: UUID,
+    body: ApprovalExecuteBody,
+    request: Request,
+    operator: OperatorPublicInfo = Depends(require_write_operator),
+) -> dict[str, Any]:
+    """Idempotently execute an approved dual-control request."""
+    data = _session_bound(request, operator, body, "executor_id", "executor_role")
+    from ledgerguard.approval import (
+        ApprovalAuthorizationError,
+        ApprovalStateError,
+        execute_approved_request,
+    )
+
+    try:
+        return execute_approved_request(
+            settings.coordinator_db_url,
+            request_id=request_id,
+            executor_id=str(data["executor_id"]),
+            executor_role=str(data.get("executor_role", "OPERATOR")),
+            expected_payload=data.get("payload"),
+        )
+    except ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ApprovalStateError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/operator/approvals/export")
+def export_operator_approvals(
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Export immutable dual-control approval audit events."""
+    from ledgerguard.approval import export_approval_audit
+
+    return export_approval_audit(settings.coordinator_db_url)
+
+
+@router.get("/operator/resilience")
+def get_operator_resilience(
+    _: None = Depends(verify_bearer_token),
+) -> list[dict[str, Any]]:
+    """Return per-participant circuit breaker and backpressure health telemetry."""
+    from ledgerguard.resilience import ParticipantResilienceController
+
+    return ParticipantResilienceController(settings.coordinator_db_url).get_health_snapshot()

@@ -1,0 +1,200 @@
+{
+  "provenance": {
+    "git_sha": "b918e468d2bf704b473a3e8c731e3b7e7c371f14",
+    "git_tree": "984e9b24d8367f4329cc2103afd31bf2a71dc959",
+    "working_tree_clean": true
+  },
+  "queries": [
+    {
+      "database": "coordinator",
+      "intended_index": "transfers_pkey",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "transfer_by_id_for_update",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "transfers"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "transfer_decisions_pkey",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "decision_by_transfer",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "transfer_decisions"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "api_idempotency_pkey",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "api_idempotency_lookup",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "api_idempotency"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "transfer_idempotency_claims_pkey",
+      "note": "Replaces an unindexed scan of transfers by key.",
+      "planner_chose_intended": true,
+      "query": "transfer_by_idempotency_key",
+      "seq_scan": false,
+      "seq_scan_without_index": true,
+      "table": "transfer_idempotency_claims"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "idx_transfers_open_created",
+      "note": "Reads only unfinished transfers, independent of how many have settled; the age filter is applied after the index.",
+      "planner_chose_intended": true,
+      "query": "open_transfer_recovery_sweep",
+      "seq_scan": false,
+      "seq_scan_without_index": true,
+      "table": "transfers"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "idx_transfers_created_desc",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "operator_transfer_list",
+      "seq_scan": false,
+      "seq_scan_without_index": true,
+      "table": "transfers"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "uq_workflow_events_transfer_event",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "workflow_timeline",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "workflow_events"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "idx_outbox_pending",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "outbox_claim",
+      "seq_scan": false,
+      "seq_scan_without_index": true,
+      "table": "outbox_events"
+    },
+    {
+      "database": "coordinator",
+      "intended_index": "idx_outbox_pending",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "outbox_claim_for_aggregate",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "outbox_events"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "uq_account_sequence",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "statement_first_page",
+      "seq_scan": false,
+      "seq_scan_without_index": true,
+      "table": "journal_lines"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "uq_account_sequence",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "statement_after_cursor",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "journal_lines"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "idempotency_records_pkey",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "ledger_idempotency_lookup",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "idempotency_records"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "local_transfers_pkey",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "local_transfer_by_id",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "local_transfers"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "transfer_intents_transfer_id_key",
+      "note": "Served by the unique constraint; the duplicate plain index was dropped.",
+      "planner_chose_intended": true,
+      "query": "intent_by_transfer",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "transfer_intents"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "holds_transfer_id_key",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "hold_by_transfer",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "holds"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "command_inbox_pkey",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "inbox_by_command",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "command_inbox"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "idx_holds_account_created",
+      "note": "Previously only the ACTIVE-holds partial index existed, so released holds were scanned.",
+      "planner_chose_intended": true,
+      "query": "holds_as_of",
+      "seq_scan": false,
+      "seq_scan_without_index": true,
+      "table": "holds"
+    },
+    {
+      "database": "ledger",
+      "intended_index": "journal_headers_sequence_number_key",
+      "note": "",
+      "planner_chose_intended": true,
+      "query": "journal_headers_from_sequence",
+      "seq_scan": false,
+      "seq_scan_without_index": null,
+      "table": "journal_headers"
+    }
+  ],
+  "redundant_indexes": {
+    "coordinator": [],
+    "ledger-1": [],
+    "ledger-2": []
+  },
+  "volume": {
+    "holds": 60000,
+    "journal_lines": 100000,
+    "outbox_events": 60000,
+    "transfers": 60000
+  }
+}

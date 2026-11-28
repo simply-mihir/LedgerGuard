@@ -204,6 +204,15 @@ def test_source_prepare_hold_and_idempotency():
     assert bal2.held_amount_minor == 4000
     assert bal2.available_balance_minor == 6000
 
+    # 3. No coordinator transfer owns this participant-level prepare, so release it through the real
+    #    cancel path; otherwise every run strands a 4000 hold (found by participant conformance).
+    cancel = handle_participant_cancel(
+        db_url=LEDGER1_DB_URL, command_id=f"cmd-cleanup-{transfer_id}", transfer_id=transfer_id)
+    assert cancel["status"] == "CANCELLED"
+    bal3 = get_account_balance(LEDGER1_DB_URL, alice.account_id)
+    assert bal3.held_amount_minor == 0
+    assert bal3.available_balance_minor == 10000
+
 
 # ---------------------------------------------------------------------------
 # 4. Cancellation Tombstone / Reordered Commands Protection
