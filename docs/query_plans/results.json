@@ -1,7 +1,7 @@
 {
   "provenance": {
-    "git_sha": "73e446d518fdfa2d817d7e14c94a7478a876303c",
-    "git_tree": "87177d414bd6239aca30b947dcb3a8bc31bae863",
+    "git_sha": "b918e468d2bf704b473a3e8c731e3b7e7c371f14",
+    "git_tree": "984e9b24d8367f4329cc2103afd31bf2a71dc959",
     "working_tree_clean": true
   },
   "queries": [
@@ -48,7 +48,7 @@
     {
       "database": "coordinator",
       "intended_index": "idx_transfers_open_created",
-      "note": "Reads only unfinished transfers, independent of how many have settled.",
+      "note": "Reads only unfinished transfers, independent of how many have settled; the age filter is applied after the index.",
       "planner_chose_intended": true,
       "query": "open_transfer_recovery_sweep",
       "seq_scan": false,
